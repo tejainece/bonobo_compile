@@ -1,83 +1,95 @@
-import 'package:c_builder/c_builder.dart' as c;
+import 'package:backend/c_builder/c_builder.dart' as c;
 import 'package:backend/bst/bst.dart';
 
-c.CompilationUnit compileUnit(BstCompilationUnit bst) {
-  final ret = new c.CompilationUnit();
-  for(BstType type in bst.types.values) {
-    ret.body.addAll(compileTypeDeclaration(type));
+c.CompilationUnit compileUnit(SxstCompilationUnit bst) {
+  final ret = new c.CompilationUnit([], [], []);
+  for (SxstType type in bst.types.values) {
+    ret.structs.add(compileTypeDeclaration(type));
+    ret.functions.addAll(compileMethods(type));
   }
-  for(BstFunction fn in bst.functions) {
-    ret.body.add(compileFunction(fn));
+  for (SxstFunction fn in bst.functions) {
+    ret.functions.add(compileFunction(fn));
   }
   return ret;
 }
 
-List<c.Code> compileTypeDeclaration(BstType type) {
-  final struct = new c.Struct();
-  for(BstFields field in type.fields) {
-    final cField = new c.Field(compileType(field.type), field.name, null);
+c.Struct compileTypeDeclaration(SxstType type) {
+  final struct = new c.Struct(compileType(type), []);
+  for (SxstFields field in type.fields) {
+    final cField = new c.Field(compileType(field.type), field.name);
     struct.fields.add(cField);
   }
-  final ret = <c.Code>[struct];
-  for(BstMethod method in type.methods) {
+  return struct;
+}
+
+List<c.Func> compileMethods(SxstType type) {
+  final ret = <c.Func>[];
+  for (SxstMethod method in type.methods) {
     ret.add(compileMethod(method));
   }
   return ret;
 }
 
-c.Code compileMethod(BstMethod bst) {
-  final ret = new c.CFunction(compileMethodSignature(bst));
-  final sts = bst.body.statements.map(compileStatement);
-  ret.body.addAll(sts);
-  return ret;
-}
-
-c.FunctionSignature compileMethodSignature(BstMethod bst) {
-  final ret = new c.FunctionSignature(compileType(bst.returnType), bst.name);
-  ret.parameters.add(new c.Parameter(compileType(bst.parent), 'self'));
-  final params = bst.parameters.map((BstParameter param) {
+c.Func compileMethod(SxstMethod bst) {
+  final params = bst.parameters.map((SxstParameter param) {
     return new c.Parameter(compileType(param.type), param.name);
-  });
-  ret.parameters.addAll(params);
-  return ret;
+  }).toList();
+  params.insert(0, new c.Parameter(bst.parent.name, 'self'));
+  final sts = bst.statements.map(compileStatement).toList();
+  return new c.Func(compileType(bst.returnType),
+      bst.parent.name + '_' + bst.name, params, sts);
 }
 
-c.CFunction compileFunction(BstFunction bst) {
-  final ret = new c.CFunction(compileFunctionSignature(bst));
-  final sts = bst.body.statements.map(compileStatement);
-  ret.body.addAll(sts);
-  return ret;
-}
-
-c.FunctionSignature compileFunctionSignature(BstFunction bst) {
-  final ret = new c.FunctionSignature(compileType(bst.returnType), bst.name);
-  final params = bst.parameters.map((BstParameter param) {
+c.Func compileFunction(SxstFunction bst) {
+  final params = bst.parameters.map((SxstParameter param) {
     return new c.Parameter(compileType(param.type), param.name);
-  });
-  ret.parameters.addAll(params);
-  return ret;
+  }).toList();
+  final sts = bst.statements.map(compileStatement).toList();
+  return new c.Func(compileType(bst.returnType), bst.name, params, sts);
 }
 
-c.Code compileStatement(BstStatement st) {
-  if(st is BstReturnStatement) return compileReturn(st);
+c.Statement compileStatement(SxstStatement st) {
+  if (st is SxstReturnStatement) return compileReturn(st);
   // TODO
   throw new Exception('Unknown statement!');
 }
 
-c.Code compileReturn(BstReturnStatement st) =>
+c.Code compileReturn(SxstReturnStatement st) =>
     compileRhsExpression(st.expression).asReturn();
 
-c.Expression compileRhsExpression(BstRhsExpression exp) {
-  if (exp is BstIntLiteral) {
-    return new c.Expression.value(exp.value);
+c.Expression compileRhsExpression(SxstRhsExpression exp) {
+  if (exp is SxstIntLiteral) {
+    return new c.IntLiteral(exp.value);
   }
-  if (exp is BstAddition) {
-    String name = exp.left.type.name;
-    return new c.Expression('bonobo_${name}_op_add').invoke(
-        [compileRhsExpression(exp.left), compileRhsExpression(exp.right)]);
+  if (exp is SxstVariable) {
+    return compileVariable(exp);
+  }
+  if (exp is SxstMemberAccess) {
+    return new c.MemberAccess(exp.name, compileMemberPart(exp.next));
+  }
+  if (exp is SxstAdd) {
+    return new c.BinaryExpression(compileRhsExpression(exp.left),
+        c.BinaryOperator.add, compileRhsExpression(exp.right));
+  }
+  if (exp is SxstMul) {
+    return new c.BinaryExpression(compileRhsExpression(exp.left),
+        c.BinaryOperator.mul, compileRhsExpression(exp.right));
   }
   // TODO
   throw new Exception('Unknown expression!');
 }
 
-c.CType compileType(BstType type) => new c.CType(type.name);
+c.MemberPart compileMemberPart(SxstMemberPart part) {
+  if (part is SxstFieldPart) {
+    return new c.FieldPart(part.name, compileMemberPart(part.next));
+  }
+  // TODO
+}
+
+String compileType(SxstType type) {
+  if (!type.isReference) return type.name;
+  return type.name + '&';
+}
+
+c.Expression compileVariable(SxstVariable variable) =>
+    new c.RawExpression(variable.name);

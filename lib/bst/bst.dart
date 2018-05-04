@@ -2,106 +2,150 @@
 
 import 'package:symbol_table/symbol_table.dart';
 
-class BstCompilationUnit {
+class SxstCompilationUnit {
   final String name;
-  final List<BstCompilationUnit> imports;
-  final Map<String, BstType> types;
-  final List<BstFunction> functions;
-  const BstCompilationUnit(this.name, this.imports, this.types, this.functions);
+  final List<SxstCompilationUnit> imports;
+  final Map<String, SxstType> types;
+  final List<SxstFunction> functions;
+  const SxstCompilationUnit(
+      this.name, this.imports, this.types, this.functions);
 }
 
-const BstCompilationUnit core =
-    const BstCompilationUnit('core', const [], const {
+const SxstCompilationUnit core =
+    const SxstCompilationUnit('core', const [], const {
   'Int': $int,
   'Double': $double,
 }, const []);
 
-abstract class Bst {}
+abstract class Sxst {}
 
-class BstType implements Bst {
+class SxstType implements Sxst {
   final String name;
-  final List<BstFields> fields;
-  final List<BstMethod> methods;
-  const BstType(this.name, this.fields, this.methods);
+  final List<SxstFields> fields;
+  final List<SxstMethod> methods;
+  const SxstType(this.name, this.fields, this.methods);
 
-  bool isType(BstType other) => other.name == name;
+  bool get isReference => false;
+
+  bool isType(SxstType other) =>
+      other.name == name && isReference == other.isReference;
+
+  SxstTypeRef get ref => new SxstTypeRef(this);
 }
 
-const BstType $int = const BstType('Int', const [], const []);
+class SxstTypeRef implements SxstType {
+  final SxstType type;
+  const SxstTypeRef(this.type);
 
-const BstType $double = const BstType('Double', const [], const []);
+  String get name => type.name;
+  List<SxstFields> get fields => type.fields;
+  List<SxstMethod> get methods => type.methods;
 
-abstract class BstTypeMember implements Bst {
-  BstType get parent;
+  bool isType(SxstType other) =>
+      other.name == name && isReference == other.isReference;
+
+  bool get isReference => true;
+
+  SxstTypeRef get ref => new SxstTypeRef(this); // TODO
 }
 
-class BstFields implements BstTypeMember, Bst {
-  final BstType parent;
-  final BstType type;
+const SxstType $int = const SxstType('Int', const [], const []);
+
+const SxstType $double = const SxstType('Double', const [], const []);
+
+abstract class SxstTypeMember implements Sxst {
+  SxstType get parent;
+}
+
+class SxstFields implements SxstTypeMember, Sxst {
+  final SxstType parent;
+  final SxstType type;
   final String name;
-  BstFields(this.parent, this.name, this.type);
+  SxstFields(this.parent, this.name, this.type);
 }
 
-class BstMethod implements BstTypeMember, Bst {
-  final BstType parent;
+class SxstMethod implements SxstTypeMember, Sxst {
+  final SxstType parent;
   final String name;
-  final List<BstParameter> parameters;
-  final BstType returnType;
-  final BstBlock body;
-  BstMethod(
-      this.parent, this.name, this.parameters, this.returnType, this.body);
+  final List<SxstParameter> parameters;
+  final SxstType returnType;
+  final List<SxstStatement> statements;
+  SxstMethod(this.parent, this.name, this.parameters, this.returnType,
+      this.statements);
 }
 
-class BstFunction implements Bst {
+class SxstFunction implements Sxst {
   String name;
-  List<BstParameter> parameters;
-  BstType returnType;
-  BstBlock body;
-
-  BstFunction(this.name, this.parameters, this.returnType, this.body);
+  List<SxstParameter> parameters;
+  SxstType returnType;
+  final List<SxstStatement> statements;
+  SxstFunction(this.name, this.parameters, this.returnType, this.statements);
 }
 
-class BstParameter implements Bst {
+class SxstParameter implements Sxst {
   String name;
-  BstType type;
+  SxstType type;
 
-  BstParameter(this.name, this.type);
+  SxstParameter(this.name, this.type);
 }
 
-abstract class BstRhsExpression implements Bst {
-  BstType get type;
+abstract class SxstRhsExpression implements Sxst {
+  SxstType get type;
 }
 
-class BstAddition implements BstRhsExpression, Bst {
-  final BstRhsExpression left;
-  final BstRhsExpression right;
-  final BstType type;
+class SxstAdd implements SxstRhsExpression, Sxst {
+  final SxstRhsExpression left;
+  final SxstRhsExpression right;
+  final SxstType type;
 
-  const BstAddition(this.type, this.left, this.right);
+  const SxstAdd(this.type, this.left, this.right);
 }
 
-class BstIntLiteral implements BstRhsExpression, Bst {
+class SxstMul implements SxstRhsExpression, Sxst {
+  final SxstRhsExpression left;
+  final SxstRhsExpression right;
+  final SxstType type;
+
+  const SxstMul(this.type, this.left, this.right);
+}
+
+abstract class SxstMemberPart implements Sxst {
+  SxstType get type;
+  SxstType get nextType;
+}
+
+class SxstFieldPart implements SxstMemberPart {
+  final SxstType type;
+  final String name;
+  final SxstMemberPart next;
+  SxstFieldPart(this.type, this.name, [this.next]);
+  SxstType get nextType => next != null? next.type: type;
+}
+
+class SxstMemberAccess implements SxstRhsExpression, Sxst {
+  final SxstType myType;
+  final String name;
+  final SxstMemberPart next;
+  SxstMemberAccess(this.myType, this.name, this.next);
+  SxstType get type => next.type;
+}
+
+class SxstIntLiteral implements SxstRhsExpression, Sxst {
   final int value;
-  final BstType type;
-  const BstIntLiteral(this.value) : type = $int;
+  final SxstType type;
+  const SxstIntLiteral(this.value) : type = $int;
 }
 
-abstract class BstBlock implements Bst {
-  List<BstStatement> get statements;
+class SxstVariable implements SxstRhsExpression, Sxst {
+  final String name;
+  final SxstType type;
+  const SxstVariable(this.name, this.type);
 }
 
-class BstExpressionBlock implements BstBlock, Bst {
-  BstRhsExpression expression;
+abstract class SxstStatement implements Sxst {}
 
-  BstExpressionBlock(this.expression);
+class SxstReturnStatement implements SxstStatement {
+  final SxstRhsExpression expression;
 
-  List<BstStatement> get statements => [new BstReturnStatement(expression)];
-}
-
-abstract class BstStatement implements Bst {}
-
-class BstReturnStatement implements BstStatement {
-  final BstRhsExpression expression;
-
-  const BstReturnStatement(this.expression);
+  const SxstReturnStatement(this.expression);
 }
