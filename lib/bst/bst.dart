@@ -13,8 +13,8 @@ class SxstCompilationUnit {
 
 const SxstCompilationUnit core =
     const SxstCompilationUnit('core', const [], const {
-  'Int': $int,
-  'Double': $double,
+  'Int': $Int,
+  'Double': $Double,
 }, const []);
 
 abstract class Sxst {}
@@ -23,16 +23,19 @@ class SxstType implements Sxst {
   final String name;
   final List<SxstFields> fields;
   final List<SxstMethod> methods;
-  const SxstType(this.name, this.fields, this.methods);
+  final List<SxstOpMethod> opMethods;
+  final List<SxstInit> initializers;
+
+  const SxstType(
+      this.name, this.fields, this.methods, this.opMethods, this.initializers);
 
   bool get isReference => false;
 
   bool isType(SxstType other) =>
       other.name == name && isReference == other.isReference;
-
-  SxstTypeRef get ref => new SxstTypeRef(this);
 }
 
+/*
 class SxstTypeRef implements SxstType {
   final SxstType type;
   const SxstTypeRef(this.type);
@@ -48,10 +51,13 @@ class SxstTypeRef implements SxstType {
 
   SxstTypeRef get ref => new SxstTypeRef(this); // TODO
 }
+*/
 
-const SxstType $int = const SxstType('Int', const [], const []);
+const SxstType $Int =
+    const SxstType('Int', const [], const [], const [], const []);
 
-const SxstType $double = const SxstType('Double', const [], const []);
+const SxstType $Double =
+    const SxstType('Double', const [], const [], const [], const []);
 
 abstract class SxstTypeMember implements Sxst {
   SxstType get parent;
@@ -74,6 +80,34 @@ class SxstMethod implements SxstTypeMember, Sxst {
       this.statements);
 }
 
+class SxstInit implements SxstTypeMember, Sxst {
+  final SxstType parent;
+  final String name;
+  final List<SxstParameter> parameters;
+  final SxstType returnType;
+  final List<SxstStatement> statements;
+  SxstInit(this.parent, this.name, this.parameters, this.returnType,
+      this.statements);
+}
+
+enum Operator {
+  add,
+  sub,
+  mul,
+  div,
+  mod,
+}
+
+class SxstOpMethod implements SxstTypeMember, Sxst {
+  final SxstType parent;
+  final Operator op;
+  final List<SxstParameter> parameters;
+  final SxstType returnType;
+  final List<SxstStatement> statements;
+  SxstOpMethod(
+      this.parent, this.op, this.parameters, this.returnType, this.statements);
+}
+
 class SxstFunction implements Sxst {
   String name;
   List<SxstParameter> parameters;
@@ -90,6 +124,10 @@ class SxstParameter implements Sxst {
 }
 
 abstract class SxstRhsExpression implements Sxst {
+  SxstType get type;
+}
+
+abstract class SxstLhsExpression implements Sxst {
   SxstType get type;
 }
 
@@ -118,11 +156,11 @@ class SxstFieldPart implements SxstMemberPart {
   final SxstType type;
   final String name;
   final SxstMemberPart next;
-  SxstFieldPart(this.type, this.name, [this.next]);
-  SxstType get nextType => next != null? next.type: type;
+  SxstFieldPart(this.name, this.type, [this.next]);
+  SxstType get nextType => next != null ? next.type : type;
 }
 
-class SxstMemberAccess implements SxstRhsExpression, Sxst {
+class SxstMemberAccess implements SxstRhsExpression, SxstLhsExpression, Sxst {
   final SxstType myType;
   final String name;
   final SxstMemberPart next;
@@ -133,10 +171,10 @@ class SxstMemberAccess implements SxstRhsExpression, Sxst {
 class SxstIntLiteral implements SxstRhsExpression, Sxst {
   final int value;
   final SxstType type;
-  const SxstIntLiteral(this.value) : type = $int;
+  const SxstIntLiteral(this.value) : type = $Int;
 }
 
-class SxstVariable implements SxstRhsExpression, Sxst {
+class SxstVariable implements SxstRhsExpression, SxstLhsExpression, Sxst {
   final String name;
   final SxstType type;
   const SxstVariable(this.name, this.type);
@@ -148,4 +186,12 @@ class SxstReturnStatement implements SxstStatement {
   final SxstRhsExpression expression;
 
   const SxstReturnStatement(this.expression);
+}
+
+class SxstAssignStatement implements SxstStatement {
+  final SxstLhsExpression lhs;
+  // TODO assignOp
+  final SxstRhsExpression rhs;
+
+  const SxstAssignStatement(this.lhs, this.rhs);
 }

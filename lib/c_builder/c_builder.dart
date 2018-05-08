@@ -207,15 +207,47 @@ class ReturnStatement extends Statement {
   }
 }
 
+class AssignStatement extends Statement {
+  final Expression lhs;
+  final Expression rhs;
+  AssignStatement(this.lhs, this.rhs);
+
+  @override
+  String toCodeSegment() {
+    var sb = new StringBuffer();
+    sb.write(lhs.toCodeSegment());
+    sb.write(' = ');  // TODO customize assignment
+    sb.write(rhs.toCodeSegment());
+    sb.write(';');
+    return sb.toString();
+  }
+}
+
+class RawStatement extends Statement {
+  final RawExpression expression;
+  RawStatement(this.expression);
+
+  @override
+  String toCodeSegment() {
+    var sb = new StringBuffer();
+    sb.write(expression.toCodeSegment());
+    sb.write(';');
+    return sb.toString();
+  }
+}
+
 class Func implements Code {
+  final bool isStatic;
   final String type;
   final String name;
   final List<Parameter> parameters;
   final List<Statement> body;
-  Func(this.type, this.name, this.parameters, this.body);
+  Func(this.type, this.name, this.parameters, this.body,
+      {this.isStatic: false});
 
   @override
   void toC(CodeBuffer buf) {
+    if(isStatic) buf.write('static ');
     buf.write(type);
     buf.write(' ');
     buf.write(name);
@@ -260,16 +292,26 @@ class Parameter implements Code {
 class Struct implements Code {
   final String name;
   final List<Field> fields;
-  Struct(this.name, List<Field> fields) : fields = fields ?? [];
+
+  // TODO constructors
+
+  // TODO factory constructors
+
+  final List<Func> methods;
+
+  Struct(this.name, List<Field> fields, List<Func> methods)
+      : fields = fields ?? <Field>[],
+        methods = methods ?? <Func>[];
   void addField(String type, String name) => fields.add(new Field(type, name));
 
   @override
   void toC(CodeBuffer buf) {
-    buf.writeln('typedef struct {');
+    buf.writeln('struct $name {');
     buf.indent();
     fields.map((f) => '${f.type} ${f.name};').forEach(buf.writeln);
+    methods.forEach((s) => s.toC(buf));
     buf.outdent();
-    buf.writeln('} $name;');
+    buf.writeln('};');
   }
 
   @override

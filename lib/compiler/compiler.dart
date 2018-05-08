@@ -5,7 +5,6 @@ c.CompilationUnit compileUnit(SxstCompilationUnit bst) {
   final ret = new c.CompilationUnit([], [], []);
   for (SxstType type in bst.types.values) {
     ret.structs.add(compileTypeDeclaration(type));
-    ret.functions.addAll(compileMethods(type));
   }
   for (SxstFunction fn in bst.functions) {
     ret.functions.add(compileFunction(fn));
@@ -14,30 +13,69 @@ c.CompilationUnit compileUnit(SxstCompilationUnit bst) {
 }
 
 c.Struct compileTypeDeclaration(SxstType type) {
-  final struct = new c.Struct(compileType(type), []);
+  final struct = new c.Struct(compileType(type), [], []);
   for (SxstFields field in type.fields) {
     final cField = new c.Field(compileType(field.type), field.name);
     struct.fields.add(cField);
   }
-  return struct;
-}
-
-List<c.Func> compileMethods(SxstType type) {
-  final ret = <c.Func>[];
-  for (SxstMethod method in type.methods) {
-    ret.add(compileMethod(method));
+  for (SxstInit method in type.initializers) {
+    struct.methods.add(compileInitMethod(method));
   }
-  return ret;
+  for (SxstMethod method in type.methods) {
+    struct.methods.add(compileMethod(method));
+  }
+  for (SxstOpMethod method in type.opMethods) {
+    struct.methods.add(compileOpMethod(method));
+  }
+  return struct;
 }
 
 c.Func compileMethod(SxstMethod bst) {
   final params = bst.parameters.map((SxstParameter param) {
     return new c.Parameter(compileType(param.type), param.name);
   }).toList();
-  params.insert(0, new c.Parameter(bst.parent.name, 'self'));
   final sts = bst.statements.map(compileStatement).toList();
+  return new c.Func(compileType(bst.returnType), bst.name, params, sts);
+}
+
+c.Func compileInitMethod(SxstInit bst) {
+  final params = bst.parameters.map((SxstParameter param) {
+    return new c.Parameter(compileType(param.type), param.name);
+  }).toList();
+  final List<c.Statement> sts = [];
+  sts.add(new c.RawStatement(
+      new c.RawExpression("${compileType(bst.parent)} self")));
+  sts.addAll(bst.statements.map(compileStatement));
+  sts.add(new c.ReturnStatement(new c.RawExpression('self')));
   return new c.Func(compileType(bst.returnType),
-      bst.parent.name + '_' + bst.name, params, sts);
+      "init" + (bst.name.isEmpty ? "" : "_${bst.name}"), params, sts,
+      isStatic: true);
+}
+
+String compileOpMethodName(Operator op) {
+  switch (op) {
+    case Operator.add:
+      return "xane_add";
+    case Operator.sub:
+      return "xane_sub";
+    case Operator.mul:
+      return "xane_mul";
+    case Operator.div:
+      return "xane_div";
+    case Operator.mod:
+      return "xane_mod";
+    default:
+      throw new Exception(); // TODO
+  }
+}
+
+c.Func compileOpMethod(SxstOpMethod bst) {
+  final params = bst.parameters.map((SxstParameter param) {
+    return new c.Parameter(compileType(param.type), param.name);
+  }).toList();
+  final sts = bst.statements.map(compileStatement).toList();
+  return new c.Func(
+      compileType(bst.returnType), compileOpMethodName(bst.op), params, sts);
 }
 
 c.Func compileFunction(SxstFunction bst) {
@@ -50,12 +88,28 @@ c.Func compileFunction(SxstFunction bst) {
 
 c.Statement compileStatement(SxstStatement st) {
   if (st is SxstReturnStatement) return compileReturn(st);
+  if (st is SxstAssignStatement) return compileAssign(st);
   // TODO
   throw new Exception('Unknown statement!');
 }
 
-c.Code compileReturn(SxstReturnStatement st) =>
+c.ReturnStatement compileReturn(SxstReturnStatement st) =>
     compileRhsExpression(st.expression).asReturn();
+
+c.AssignStatement compileAssign(SxstAssignStatement st) {
+  return new c.AssignStatement(
+      compileLhsExpression(st.lhs), compileRhsExpression(st.rhs));
+}
+
+c.Expression compileLhsExpression(SxstLhsExpression exp) {
+  if (exp is SxstVariable) {
+    return compileVariable(exp);
+  }
+  if (exp is SxstMemberAccess) {
+    return new c.MemberAccess(exp.name, compileMemberPart(exp.next));
+  }
+  throw new Exception("Unknown LHS expression");
+}
 
 c.Expression compileRhsExpression(SxstRhsExpression exp) {
   if (exp is SxstIntLiteral) {
