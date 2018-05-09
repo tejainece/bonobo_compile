@@ -69,10 +69,10 @@ class FieldPart extends MemberPart {
 }
 
 class CallPart extends MemberPart {
-  final Expression target;
+  final String name;
   final List<Expression> arguments;
   final MemberPart next;
-  CallPart(this.target, this.arguments, [this.next]);
+  CallPart(this.name, this.arguments, [this.next]);
 
   @override
   void toC(CodeBuffer buf) {
@@ -81,7 +81,9 @@ class CallPart extends MemberPart {
 
   String toCodeSegment() {
     var sb = new StringBuffer();
-    sb.write('.(');
+    sb.write('.');
+    sb.write(name);
+    sb.write('(');
     sb.write(arguments.map((a) => a.toCodeSegment()).join(', '));
     sb.write(')');
     if (next != null) sb.write(next.toCodeSegment());
@@ -90,13 +92,13 @@ class CallPart extends MemberPart {
 }
 
 class MemberAccess extends Expression {
-  final String target;
+  final Expression target;
   final MemberPart next;
   MemberAccess(this.target, this.next);
 
   String toCodeSegment() {
     var sb = new StringBuffer();
-    sb.write(target);
+    sb.write(target.toCodeSegment());
     sb.write(next.toCodeSegment());
     return sb.toString();
   }
@@ -114,6 +116,29 @@ class FuncCall extends Expression {
 
   String toCodeSegment() {
     var sb = new StringBuffer();
+    sb.write(name);
+    sb.write('(');
+    sb.write(arguments.map((a) => a.toCodeSegment()).join(', '));
+    sb.write(')');
+    return sb.toString();
+  }
+}
+
+class StaticMethodCall extends Expression {
+  final String parent;
+  final String name;
+  final List<Expression> arguments;
+  StaticMethodCall(this.parent, this.name, this.arguments);
+
+  @override
+  void toC(CodeBuffer buf) {
+    buf.write(toCodeSegment());
+  }
+
+  String toCodeSegment() {
+    var sb = new StringBuffer();
+    sb.write(parent);
+    sb.write('::');
     sb.write(name);
     sb.write('(');
     sb.write(arguments.map((a) => a.toCodeSegment()).join(', '));
@@ -144,19 +169,31 @@ class BinaryExpression extends Expression {
   final Expression left;
   final BinaryOperator op;
   final Expression right;
-  BinaryExpression(this.left, this.op, this.right);
+  final bool isRef;
+  BinaryExpression(this.left, this.op, this.right, {this.isRef: false});
 
   @override
   String toCodeSegment() {
-    var sb = new StringBuffer();
-    sb.write('(');
-    sb.write(left.toCodeSegment());
-    sb.write(' ');
-    sb.write(op.toCodeSegment());
-    sb.write(' ');
-    sb.write(right.toCodeSegment());
-    sb.write(')');
-    return sb.toString();
+    if (!isRef) {
+      var sb = new StringBuffer();
+      sb.write('(');
+      sb.write(left.toCodeSegment());
+      sb.write(' ');
+      sb.write(op.toCodeSegment());
+      sb.write(' ');
+      sb.write(right.toCodeSegment());
+      sb.write(')');
+      return sb.toString();
+    } else {
+      var sb = new StringBuffer();
+      sb.write(left.toCodeSegment());
+      sb.write('->operator');
+      sb.write(op.toCodeSegment());
+      sb.write('(');
+      sb.write(right.toCodeSegment());
+      sb.write(')');
+      return sb.toString();
+    }
   }
 }
 
@@ -207,6 +244,19 @@ class ReturnStatement extends Statement {
   }
 }
 
+class ExpressionStatement extends Statement {
+  final Expression expression;
+  ExpressionStatement(this.expression);
+
+  @override
+  String toCodeSegment() {
+    var sb = new StringBuffer();
+    sb.write(expression.toCodeSegment());
+    sb.write(';');
+    return sb.toString();
+  }
+}
+
 class AssignStatement extends Statement {
   final Expression lhs;
   final Expression rhs;
@@ -216,7 +266,7 @@ class AssignStatement extends Statement {
   String toCodeSegment() {
     var sb = new StringBuffer();
     sb.write(lhs.toCodeSegment());
-    sb.write(' = ');  // TODO customize assignment
+    sb.write(' = '); // TODO customize assignment
     sb.write(rhs.toCodeSegment());
     sb.write(';');
     return sb.toString();
@@ -247,7 +297,7 @@ class Func implements Code {
 
   @override
   void toC(CodeBuffer buf) {
-    if(isStatic) buf.write('static ');
+    if (isStatic) buf.write('static ');
     buf.write(type);
     buf.write(' ');
     buf.write(name);
@@ -291,22 +341,26 @@ class Parameter implements Code {
 
 class Struct implements Code {
   final String name;
+  final List<TypeName> inherits;
   final List<Field> fields;
-
   // TODO constructors
-
-  // TODO factory constructors
-
   final List<Func> methods;
 
-  Struct(this.name, List<Field> fields, List<Func> methods)
+  Struct(this.name, List<Field> fields, List<Func> methods,
+      {List<TypeName> inherits})
       : fields = fields ?? <Field>[],
-        methods = methods ?? <Func>[];
+        methods = methods ?? <Func>[],
+        inherits = inherits ?? [];
   void addField(String type, String name) => fields.add(new Field(type, name));
 
   @override
   void toC(CodeBuffer buf) {
-    buf.writeln('struct $name {');
+    buf.write('struct $name');
+    if(inherits.length != 0) {
+      buf.write(': ');
+      buf.write(inherits.map((i) => i.toCodeSegment()).join(", "));
+    }
+    buf.writeln(' {');
     buf.indent();
     fields.map((f) => '${f.type} ${f.name};').forEach(buf.writeln);
     methods.forEach((s) => s.toC(buf));
@@ -359,4 +413,60 @@ class EnumValue implements Code {
 
   @override
   void toC(CodeBuffer buf) {}
+}
+
+abstract class TemplateArg implements Code {}
+
+class ClassTemplateArg implements TemplateArg {
+  // TODO what about template template parameters?
+  String name;
+  ClassTemplateArg(this.name);
+
+  @override
+  String toCodeSegment() {
+    return 'class $name';
+  }
+
+  @override
+  void toC(CodeBuffer buf) {
+    buf.write(toCodeSegment());
+  }
+}
+
+class IntTemplateArg implements TemplateArg {
+  String name;
+  IntTemplateArg(this.name);
+
+  @override
+  String toCodeSegment() {
+    return 'uint64_t $name';
+  }
+
+  @override
+  void toC(CodeBuffer buf) {
+    buf.write(toCodeSegment());
+  }
+}
+
+class TypeName implements Code {
+  String name;
+  List<TemplateArg> args;
+  TypeName(this.name, [this.args = const []]);
+
+  @override
+  String toCodeSegment() {
+    var sb = new StringBuffer();
+    sb.write(name);
+    if (args.length != 0) {
+      sb.write('<');
+      sb.write(args.map((a) => a.toCodeSegment()).join(', '));
+      sb.write('>');
+    }
+    return sb.toString();
+  }
+
+  @override
+  void toC(CodeBuffer buf) {
+    buf.write(toCodeSegment());
+  }
 }

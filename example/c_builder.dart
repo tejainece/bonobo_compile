@@ -1,5 +1,11 @@
 import 'package:backend/c_builder/c_builder.dart';
 
+class A {
+  int a;
+}
+
+A getA() => A();
+
 main() {
   final unit = new CompilationUnit([], [], [
     new Func('i8', 'add', [

@@ -1,197 +1,211 @@
-/// Bonobo Syntax Tree (BST)
+part 'types.dart';
+part 'core.dart';
+part 'statement.dart';
 
-import 'package:symbol_table/symbol_table.dart';
-
-class SxstCompilationUnit {
+class CompilationUnit {
   final String name;
-  final List<SxstCompilationUnit> imports;
-  final Map<String, SxstType> types;
-  final List<SxstFunction> functions;
-  const SxstCompilationUnit(
-      this.name, this.imports, this.types, this.functions);
+  final List<CompilationUnit> imports;
+  final Map<String, TypeDecl> types;
+  final List<Func> functions;
+  const CompilationUnit(this.name, this.imports, this.types, this.functions);
+  void addType(TypeDecl type) {
+    // TODO throw if type with name already exists
+    types[type.name] = type;
+  }
 }
-
-const SxstCompilationUnit core =
-    const SxstCompilationUnit('core', const [], const {
-  'Int': $Int,
-  'Double': $Double,
-}, const []);
 
 abstract class Sxst {}
 
-class SxstType implements Sxst {
-  final String name;
-  final List<SxstFields> fields;
-  final List<SxstMethod> methods;
-  final List<SxstOpMethod> opMethods;
-  final List<SxstInit> initializers;
-
-  const SxstType(
-      this.name, this.fields, this.methods, this.opMethods, this.initializers);
-
-  bool get isReference => false;
-
-  bool isType(SxstType other) =>
-      other.name == name && isReference == other.isReference;
-}
-
-/*
-class SxstTypeRef implements SxstType {
-  final SxstType type;
-  const SxstTypeRef(this.type);
-
-  String get name => type.name;
-  List<SxstFields> get fields => type.fields;
-  List<SxstMethod> get methods => type.methods;
-
-  bool isType(SxstType other) =>
-      other.name == name && isReference == other.isReference;
-
-  bool get isReference => true;
-
-  SxstTypeRef get ref => new SxstTypeRef(this); // TODO
-}
-*/
-
-const SxstType $Int =
-    const SxstType('Int', const [], const [], const [], const []);
-
-const SxstType $Double =
-    const SxstType('Double', const [], const [], const [], const []);
-
-abstract class SxstTypeMember implements Sxst {
-  SxstType get parent;
-}
-
-class SxstFields implements SxstTypeMember, Sxst {
-  final SxstType parent;
-  final SxstType type;
-  final String name;
-  SxstFields(this.parent, this.name, this.type);
-}
-
-class SxstMethod implements SxstTypeMember, Sxst {
-  final SxstType parent;
-  final String name;
-  final List<SxstParameter> parameters;
-  final SxstType returnType;
-  final List<SxstStatement> statements;
-  SxstMethod(this.parent, this.name, this.parameters, this.returnType,
-      this.statements);
-}
-
-class SxstInit implements SxstTypeMember, Sxst {
-  final SxstType parent;
-  final String name;
-  final List<SxstParameter> parameters;
-  final SxstType returnType;
-  final List<SxstStatement> statements;
-  SxstInit(this.parent, this.name, this.parameters, this.returnType,
-      this.statements);
-}
-
-enum Operator {
-  add,
-  sub,
-  mul,
-  div,
-  mod,
-}
-
-class SxstOpMethod implements SxstTypeMember, Sxst {
-  final SxstType parent;
-  final Operator op;
-  final List<SxstParameter> parameters;
-  final SxstType returnType;
-  final List<SxstStatement> statements;
-  SxstOpMethod(
-      this.parent, this.op, this.parameters, this.returnType, this.statements);
-}
-
-class SxstFunction implements Sxst {
+class Func implements Sxst {
   String name;
-  List<SxstParameter> parameters;
-  SxstType returnType;
-  final List<SxstStatement> statements;
-  SxstFunction(this.name, this.parameters, this.returnType, this.statements);
+  List<Param> parameters;
+  TypeDecl returnType;
+  final List<Statement> statements;
+  Func(this.name, this.parameters, this.returnType, this.statements);
 }
 
-class SxstParameter implements Sxst {
+class Param implements Sxst {
   String name;
-  SxstType type;
+  TypeDecl type;
 
-  SxstParameter(this.name, this.type);
+  Param(this.name, this.type);
 }
 
-abstract class SxstRhsExpression implements Sxst {
-  SxstType get type;
+abstract class Expression implements Sxst {
+  TypeDecl get type;
+
+  const Expression();
+
+  Expression operator +(Expression other) {
+    return addOp(other);
+  }
+
+  Expression addOp(Expression other, {TypeDecl resType}) {
+    return new AddExpression(resType ?? type, this, other);
+  }
+
+  Expression operator *(Expression other) {
+    return mulOp(other);
+  }
+
+  Expression mulOp(Expression other, {TypeDecl resType}) {
+    return new MulExpression(resType ?? type, this, other);
+  }
+
+  MemberAccess field(String name) {
+    Field f = type.fieldByName(name);
+    if (f == null)
+      throw new Exception("Field $name not found in ${type.name}!");
+    return new MemberAccess(this, new FieldPart(f.name, f.type));
+  }
+
+  MemberAccess call(String name, {List<Expression> args: const []}) {
+    Method m = type.methodByInvocation(name, args);
+    if (m == null)
+      throw new Exception("Method $name not found in ${type.name}!");
+    return new MemberAccess(this, new CallPart(name, m.returnType, args));
+  }
+
+  /* TODO
+  FuncCall invoke(List<Expression> args) {
+    new FuncCall(type, name, args);
+  }
+  */
 }
 
-abstract class SxstLhsExpression implements Sxst {
-  SxstType get type;
+class AddExpression extends Expression {
+  final Expression left;
+  final Expression right;
+  final TypeDecl type;
+
+  const AddExpression(this.type, this.left, this.right);
 }
 
-class SxstAdd implements SxstRhsExpression, Sxst {
-  final SxstRhsExpression left;
-  final SxstRhsExpression right;
-  final SxstType type;
+class MulExpression extends Expression {
+  final Expression left;
+  final Expression right;
+  final TypeDecl type;
 
-  const SxstAdd(this.type, this.left, this.right);
+  const MulExpression(this.type, this.left, this.right);
 }
 
-class SxstMul implements SxstRhsExpression, Sxst {
-  final SxstRhsExpression left;
-  final SxstRhsExpression right;
-  final SxstType type;
+// TODO function call
 
-  const SxstMul(this.type, this.left, this.right);
+abstract class MemberPart implements Sxst {
+  TypeDecl get type;
+  TypeDecl get nextType;
+
+  void field(String name);
+
+  void call(String name, {List<Expression> args: const []});
 }
 
-abstract class SxstMemberPart implements Sxst {
-  SxstType get type;
-  SxstType get nextType;
-}
-
-class SxstFieldPart implements SxstMemberPart {
-  final SxstType type;
+class FieldPart implements MemberPart {
+  final TypeDecl type;
   final String name;
-  final SxstMemberPart next;
-  SxstFieldPart(this.name, this.type, [this.next]);
-  SxstType get nextType => next != null ? next.type : type;
+  MemberPart next;
+  FieldPart(this.name, this.type, [this.next]);
+  TypeDecl get nextType => next != null ? next.type : type;
+  void field(String name) {
+    if (next != null) {
+      next.field(name);
+      return;
+    }
+    Field f = type.fieldByName(name);
+    if (f == null)
+      throw new Exception("Field $name not found in ${type.name}!");
+    next = FieldPart(f.name, f.type);
+  }
+
+  void call(String name, {List<Expression> args: const []}) {
+    if (next != null) {
+      next.field(name);
+      return;
+    }
+    Method m = type.methodByInvocation(name, args);
+    if (m == null) throw new Exception("Method not found!");
+    next = new CallPart(name, m.returnType, args);
+  }
 }
 
-class SxstMemberAccess implements SxstRhsExpression, SxstLhsExpression, Sxst {
-  final SxstType myType;
+class CallPart implements MemberPart {
+  final TypeDecl type;
   final String name;
-  final SxstMemberPart next;
-  SxstMemberAccess(this.myType, this.name, this.next);
-  SxstType get type => next.type;
+  final List<Expression> args;
+  MemberPart next;
+  CallPart(this.name, this.type, this.args, [this.next]);
+  TypeDecl get nextType => next != null ? next.type : type;
+  void field(String name) {
+    if (next != null) {
+      next.field(name);
+      return;
+    }
+    Field f = type.fieldByName(name);
+    if (f == null)
+      throw new Exception("Field $name not found in ${type.name}!");
+    next = FieldPart(f.name, f.type);
+  }
+
+  void call(String name, {List<Expression> args: const []}) {
+    if (next != null) {
+      next.field(name);
+      return;
+    }
+    Method m = type.methodByInvocation(name, args);
+    if (m == null) throw new Exception("Method not found!");
+    next = new CallPart(name, m.returnType, args);
+  }
 }
 
-class SxstIntLiteral implements SxstRhsExpression, Sxst {
+// TODO subscript part
+
+class MemberAccess extends Expression {
+  final Expression start;
+  final MemberPart next;
+  MemberAccess(this.start, this.next);
+  TypeDecl get type => next.nextType;
+  TypeDecl get myType => start.type;
+  MemberAccess field(String name) {
+    next.field(name);
+    return this;
+  }
+
+  MemberAccess call(String name, {List<Expression> args: const []}) {
+    next.call(name, args: args);
+    return this;
+  }
+}
+
+class FuncCall extends Expression {
+  final TypeDecl type;
+  final String name;
+  final List<Expression> args;
+  FuncCall(this.type, this.name, this.args);
+}
+
+class InitCall extends Expression {
+  final TypeDecl type;
+  final String name;
+  final List<Expression> args;
+  InitCall(this.name, this.type, this.args);
+
+  String get methodName => name.isEmpty ? "init" : "init_${name}";
+}
+
+class IntLiteral extends Expression {
   final int value;
-  final SxstType type;
-  const SxstIntLiteral(this.value) : type = $Int;
+  const IntLiteral(this.value);
+  TypeDecl get type => $Int;
 }
 
-class SxstVariable implements SxstRhsExpression, SxstLhsExpression, Sxst {
+class StringLiteral extends Expression {
+  final String value;
+  const StringLiteral(this.value);
+  TypeDecl get type => $String;
+}
+
+class $Var extends Expression {
   final String name;
-  final SxstType type;
-  const SxstVariable(this.name, this.type);
-}
-
-abstract class SxstStatement implements Sxst {}
-
-class SxstReturnStatement implements SxstStatement {
-  final SxstRhsExpression expression;
-
-  const SxstReturnStatement(this.expression);
-}
-
-class SxstAssignStatement implements SxstStatement {
-  final SxstLhsExpression lhs;
-  // TODO assignOp
-  final SxstRhsExpression rhs;
-
-  const SxstAssignStatement(this.lhs, this.rhs);
+  final TypeDecl type;
+  const $Var(this.name, this.type);
 }
