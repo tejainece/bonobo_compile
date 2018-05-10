@@ -241,6 +241,30 @@ class StringLiteral extends Expression {
   String toCodeSegment() => '"$value"';
 }
 
+class Block implements Statement {
+  final List<Statement> statements;
+  Block(this.statements);
+
+  @override
+  void toC(CodeBuffer buf) {
+    buf.writeln('{');
+    buf.indent();
+    for(Statement st in statements) {
+      st.toC(buf);
+      buf.writeln();
+    }
+    buf.outdent();
+    buf.writeln('}');
+  }
+
+  @override
+  String toCodeSegment() {
+    var cb = new CodeBuffer();
+    toC(cb);
+    return cb.toString();
+  }
+}
+
 abstract class Statement implements Code {
   const Statement();
 
@@ -307,7 +331,7 @@ class VarDeclStatement extends Statement {
     sb.write(type.toCodeSegment());
     sb.write(' ');
     sb.write(name);
-    if(initialize) {
+    if (initialize) {
       sb.write('(');
       sb.write(args.map((e) => e.toCodeSegment()).join(', '));
       sb.write(')');
@@ -339,7 +363,7 @@ class FuncPrototype implements Code {
 
   @override
   void toC(CodeBuffer buf) {
-    if(isVirtual) buf.write('virtual ');
+    if (isVirtual) buf.write('virtual ');
     buf.write(returns.toCodeSegment());
     buf.write(' ');
     buf.write(name);
@@ -356,12 +380,35 @@ class FuncPrototype implements Code {
   }
 }
 
+class Deconstructor implements Code {
+  final bool isVirtual;
+  final String name;
+  final Block body;
+  Deconstructor(this.name, this.body,
+      {this.isVirtual: false});
+
+  @override
+  void toC(CodeBuffer buf) {
+    buf.write('~');
+    buf.write(name);
+    buf.write('() ');
+    body.toC(buf);
+  }
+
+  @override
+  String toCodeSegment() {
+    var cb = new CodeBuffer();
+    toC(cb);
+    return cb.toString();
+  }
+}
+
 class Func implements Code {
   final bool isStatic;
   final TypeName returns;
   final String name;
   final List<Parameter> parameters;
-  final List<Statement> body;
+  final Block body;
   Func(this.returns, this.name, this.parameters, this.body,
       {this.isStatic: false});
 
@@ -373,12 +420,8 @@ class Func implements Code {
     buf.write(name);
     buf.write('(');
     buf.write(parameters.map((p) => p.toCodeSegment()).join(', '));
-    buf.write(')');
-    buf.writeln(' {');
-    buf.indent();
-    body.map((s) => s.toCodeSegment()).forEach((s) => buf.writeln(s));
-    buf.outdent();
-    buf.writeln('}');
+    buf.write(') ');
+    body.toC(buf);
   }
 
   @override
@@ -413,9 +456,9 @@ class Struct implements Code {
   final String name;
   final List<TypeName> inherits;
   final List<Field> fields;
-  // TODO constructors
   final List<Func> methods;
   final List<FuncPrototype> methodPrototypes;
+  Deconstructor deconstructor;
 
   Struct(this.name, List<Field> fields, List<Func> methods,
       {List<TypeName> inherits, List<FuncPrototype> methodPrototypes})
@@ -436,6 +479,7 @@ class Struct implements Code {
     fields.map((f) => f.toCodeSegment()).forEach(buf.writeln);
     methods.forEach((s) => s.toC(buf));
     methodPrototypes.forEach((s) => s.toC(buf));
+    if(deconstructor != null) deconstructor.toC(buf);
     buf.outdent();
     buf.writeln('};');
   }
@@ -456,7 +500,10 @@ class Field implements Code {
   final String name;
   final Expression initialization;
   Field(this.type, this.name,
-      {this.isStatic: false, this.isConstExpr: false, this.isConst: false, this.initialization});
+      {this.isStatic: false,
+      this.isConstExpr: false,
+      this.isConst: false,
+      this.initialization});
 
   @override
   void toC(CodeBuffer buf) {
@@ -473,7 +520,7 @@ class Field implements Code {
     sb.write(type.toCodeSegment());
     sb.write(' ');
     sb.write(name);
-    if(initialization != null) {
+    if (initialization != null) {
       sb.write(' = ');
       sb.write(initialization.toCodeSegment());
     }

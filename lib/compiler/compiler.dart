@@ -46,7 +46,10 @@ c.Struct compileTypeDeclaration(TypeDecl type) {
     for (Init method in type.initializers) {
       struct.methods.add(compileClassInitMethod(method));
     }
-    // TODO deinitializer
+    if (type.deinitializer != null) {
+      struct.deconstructor = new c.Deconstructor(
+          '~${type.name}', compileBlock(type.deinitializer.body));
+    }
   } else if (type is StructDecl) {
     for (Init method in type.initializers) {
       struct.methods.add(compileStructInitMethod(method));
@@ -63,7 +66,7 @@ c.Struct compileTypeDeclaration(TypeDecl type) {
     struct.methods.add(compileOpMethod(method));
   }
   struct.methods.add(new c.Func(compileVarType($Type), 'runtimeType', [],
-      [new c.ReturnStatement(new c.RawExpression('xaneType'))]));
+      new c.Block([new c.ReturnStatement(new c.RawExpression('xaneType'))])));
   struct.fields.add(new c.Field(compileVarType($Type), 'xaneType',
       isStatic: true,
       isConstExpr: true,
@@ -87,25 +90,27 @@ c.Func compileMethod(Method bst) {
   final params = bst.parameters.map((Param param) {
     return new c.Parameter(compileVarType(param.type), param.name);
   }).toList();
-  final sts = bst.statements.map(compileStatement).toList();
-  return new c.Func(compileVarType(bst.returnType), bst.name, params, sts);
+  return new c.Func(
+      compileVarType(bst.returnType), bst.name, params, compileBlock(bst.body));
 }
 
 c.Func compileStructInitMethod(Init bst) {
   final params = bst.parameters.map((Param param) {
     return new c.Parameter(compileVarType(param.type), param.name);
   }).toList();
-  final List<c.Statement> sts = [];
-  if (bst.statements.isNotEmpty) {
-    sts.add(new c.VarDeclStatement(compileVarType(bst.parent), 'self'));
-    sts.addAll(bst.statements.map(compileStatement));
-    sts.add(new c.ReturnStatement(new c.RawExpression('self')));
+  c.Block body;
+  if (bst.body.statements.isNotEmpty) {
+    body = compileBlock(bst.body,
+        preC: [new c.VarDeclStatement(compileVarType(bst.parent), 'self')],
+        postC: [new c.ReturnStatement(new c.RawExpression('self'))]);
   } else {
-    sts.add(new c.ReturnStatement(
-        new c.ConstructorCallExpression(compileVarType(bst.parent))));
+    body = new c.Block([
+      new c.ReturnStatement(
+          new c.ConstructorCallExpression(compileVarType(bst.parent)))
+    ]);
   }
   return new c.Func(compileVarType(bst.parent),
-      "init" + (bst.name.isEmpty ? "" : "_${bst.name}"), params, sts,
+      "init" + (bst.name.isEmpty ? "" : "_${bst.name}"), params, body,
       isStatic: true);
 }
 
@@ -113,20 +118,24 @@ c.Func compileClassInitMethod(Init bst) {
   final params = bst.parameters.map((Param param) {
     return new c.Parameter(compileVarType(param.type), param.name);
   }).toList();
-  final List<c.Statement> sts = [];
-  if (bst.statements.isNotEmpty) {
-    sts.add(new c.VarDeclStatement(compileVarType(bst.parent), 'self',
-        initialize: true,
-        args: [new c.NewAllocExpression(compileVarType(bst.parent), [])]));
-    sts.addAll(bst.statements.map(compileStatement));
-    sts.add(new c.ReturnStatement(new c.RawExpression('self')));
+  c.Block body;
+  if (bst.body.statements.isNotEmpty) {
+    body = compileBlock(bst.body, preC: [
+      new c.VarDeclStatement(compileVarType(bst.parent), 'self',
+          initialize: true,
+          args: [new c.NewAllocExpression(compileVarType(bst.parent), [])])
+    ], postC: [
+      new c.ReturnStatement(new c.RawExpression('self'))
+    ]);
   } else {
-    sts.add(new c.ReturnStatement(new c.ConstructorCallExpression(
-        compileVarType(bst.parent),
-        [new c.NewAllocExpression(compileVarType(bst.parent), [])])));
+    body = new c.Block([
+      new c.ReturnStatement(new c.ConstructorCallExpression(
+          compileVarType(bst.parent),
+          [new c.NewAllocExpression(compileVarType(bst.parent), [])]))
+    ]);
   }
   return new c.Func(compileVarType(bst.parent),
-      "init" + (bst.name.isEmpty ? "" : "_${bst.name}"), params, sts,
+      "init" + (bst.name.isEmpty ? "" : "_${bst.name}"), params, body,
       isStatic: true);
 }
 
@@ -151,17 +160,29 @@ c.Func compileOpMethod(SxstOvOp bst) {
   final params = bst.parameters.map((Param param) {
     return new c.Parameter(compileVarType(param.type), param.name);
   }).toList();
-  final sts = bst.statements.map(compileStatement).toList();
-  return new c.Func(
-      compileVarType(bst.returnType), compileOpMethodName(bst.op), params, sts);
+  return new c.Func(compileVarType(bst.returnType), compileOpMethodName(bst.op),
+      params, compileBlock(bst.body));
 }
 
 c.Func compileFunction(Func bst) {
   final params = bst.parameters.map((Param param) {
     return new c.Parameter(compileVarType(param.type), param.name);
   }).toList();
-  final sts = bst.statements.map(compileStatement).toList();
-  return new c.Func(compileVarType(bst.returnType), bst.name, params, sts);
+  return new c.Func(
+      compileVarType(bst.returnType), bst.name, params, compileBlock(bst.body));
+}
+
+c.Block compileBlock(Block block,
+    {List<c.Statement> preC: const [], List<c.Statement> postC: const []}) {
+  var ret = new c.Block([]);
+  for(Statement st in block.statements) {
+    if(st is Block) {
+      ret.statements.add(compileBlock(st));
+    } else {
+      ret.statements.add(compileStatement(st));
+    }
+  }
+  return ret;
 }
 
 c.Statement compileStatement(Statement st) {

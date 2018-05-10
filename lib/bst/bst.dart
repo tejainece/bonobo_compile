@@ -20,8 +20,8 @@ class Func implements Sxst {
   String name;
   List<Param> parameters;
   TypeDecl returnType;
-  final List<Statement> statements;
-  Func(this.name, this.parameters, this.returnType, this.statements);
+  final Block body;
+  Func(this.name, this.parameters, this.returnType, this.body);
 }
 
 class Param implements Sxst {

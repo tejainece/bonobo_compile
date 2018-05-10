@@ -29,6 +29,7 @@ void composePoint() {
         .addAssign(point_t.mkV('self').field('x'), $Int.mkV('x'))
         .addAssign(point_t.mkV('self').field('y'), $Int.mkV('y'));
 
+  /* TODO
   point_t.opMethods.add(new SxstOvOp(
       point_t,
       OvOp.add,
@@ -48,6 +49,7 @@ void composePoint() {
                   new $Var('other', point_t), new FieldPart('y', $Int)))
         ])),
       ]));
+      */
 }
 
 void composeAnimal() {

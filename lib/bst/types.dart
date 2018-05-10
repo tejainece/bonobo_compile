@@ -89,7 +89,7 @@ abstract class MixinTypeDeclMixin implements MixinTypeDecl {
 
   Method addMethod(String name, List<Param> parameters, TypeDecl returnType) {
     if (returnType == $Self) returnType = this;
-    var meth = new Method(this, name, parameters, returnType, []);
+    var meth = new Method(this, name, parameters, returnType, new Block([]));
     methods.add(meth);
     return meth;
   }
@@ -154,7 +154,7 @@ abstract class ConcreteTypeDeclMixin implements ConcreteTypeDecl {
   final List<SxstOvOp> opMethods = [];
   final List<Init> initializers = [];
   Init addInit(List<Param> parameters, {String name: ""}) {
-    var init = new Init(this, name, parameters, []);
+    var init = new Init(this, name, parameters, new Block([]));
     initializers.add(init);
     return init;
   }
@@ -170,7 +170,7 @@ abstract class ConcreteTypeDeclMixin implements ConcreteTypeDecl {
 
   Method addMethod(String name, List<Param> parameters, TypeDecl returnType) {
     if (returnType == $Self) returnType = this;
-    var meth = new Method(this, name, parameters, returnType, []);
+    var meth = new Method(this, name, parameters, returnType, new Block([]));
     methods.add(meth);
     return meth;
   }
@@ -203,9 +203,14 @@ class ClassDecl extends Object
   final String name;
   final List<ClassInterfaceDecl> interface = [];
   final List<ClassMixinTypeDecl> mixins = [];
-  // TODO deinitializer
+  Deinit deinitializer;
   ClassDecl(this.name);
   bool isSameType(TypeDecl other) => other is StructDecl && other.name == name;
+
+  Deinit addDeinit() {
+    deinitializer = new Deinit(this, new Block([]));
+    return deinitializer;
+  }
 }
 
 abstract class TypeMember implements Sxst {
@@ -245,9 +250,8 @@ class Method implements TypeMember, MethodPrototype {
   final String name;
   final List<Param> parameters;
   final TypeDecl returnType;
-  final List<Statement> statements;
-  Method(this.parent, this.name, this.parameters, this.returnType,
-      this.statements);
+  final Block body;
+  Method(this.parent, this.name, this.parameters, this.returnType, this.body);
 
   bool isInvokable(List<Expression> args) {
     if (args.length != parameters.length) return false;
@@ -263,7 +267,7 @@ class Method implements TypeMember, MethodPrototype {
   }
 
   void addStatement(Statement st) {
-    statements.add(st);
+    body.statements.add(st);
   }
 
   void addRetSt(Expression exp) {
@@ -300,24 +304,24 @@ class SxstOvOp implements TypeMember, OvOpPrototype {
   final OvOp op;
   final List<Param> parameters;
   final TypeDecl returnType;
-  final List<Statement> statements;
+  final Block body;
   SxstOvOp(
-      this.parent, this.op, this.parameters, this.returnType, this.statements);
+      this.parent, this.op, this.parameters, this.returnType, this.body);
 }
 
 class Init implements TypeMember, Sxst {
   final TypeDecl parent;
   final String name;
   final List<Param> parameters;
-  final List<Statement> statements;
-  Init(this.parent, this.name, this.parameters, this.statements);
+  final Block body;
+  Init(this.parent, this.name, this.parameters, this.body);
 
   void addParam(String name, TypeDecl type) {
     parameters.add(new Param(name, type));
   }
 
   void addStatement(Statement st) {
-    statements.add(st);
+    body.statements.add(st);
   }
 
   void addRetSt(Expression exp) {
@@ -325,6 +329,21 @@ class Init implements TypeMember, Sxst {
   }
 
   Init addAssign(Expression lhs, Expression rhs) {
+    addStatement(new AssignStatement(lhs, AssignOp.eq, rhs));
+    return this;
+  }
+}
+
+class Deinit implements TypeMember, Sxst {
+  final TypeDecl parent;
+  final Block body;
+  Deinit(this.parent, this.body);
+
+  void addStatement(Statement st) {
+    body.statements.add(st);
+  }
+
+  Deinit addAssign(Expression lhs, Expression rhs) {
     addStatement(new AssignStatement(lhs, AssignOp.eq, rhs));
     return this;
   }

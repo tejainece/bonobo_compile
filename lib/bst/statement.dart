@@ -2,6 +2,11 @@ part of 'bst.dart';
 
 abstract class Statement implements Sxst {}
 
+class Block implements Statement {
+  final List<Statement> statements;
+  Block(this.statements);
+}
+
 class ReturnStatement implements Statement {
   final Expression expression;
 

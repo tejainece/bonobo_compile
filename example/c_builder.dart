@@ -11,9 +11,9 @@ main() {
     new Func(new TypeName('i8', []), 'add', [
       new Parameter(new TypeName('i8', []), 'a'),
       new Parameter(new TypeName('i8', []), 'b')
-    ], [
+    ], new Block([
       new ReturnStatement(new IntLiteral(5).add(new IntLiteral(5))),
-    ]),
+    ])),
   ]);
   print(unit.toCodeSegment());
 }
