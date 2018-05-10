@@ -1,1 +1,2 @@
-library backend;
+export 'bst/bst.dart';
+export 'compiler/compiler.dart';

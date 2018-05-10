@@ -1,12 +1,20 @@
 import 'package:backend/backend.dart';
-import 'package:backend/bst/bst.dart';
-import 'package:backend/compiler/compiler.dart';
 
-StructDecl composePoint() {
+final point_t = new StructDecl('Point');
+final animal_t = new ClassInterfaceDecl('Animal');
+final dog_t = new ClassDecl('Dog');
+
+CompilationUnit unit = new CompilationUnit('Teja')
+  ..imports.add(core)
+  ..addType(point_t)
+  ..addType(animal_t)
+  ..addType(dog_t);
+
+void composePoint() {
   var x = new $Var('x', $Int);
   var y = new $Var('y', $Int);
 
-  StructDecl point_t = new StructDecl('Point')
+  point_t
     ..addField('x', $Int)
     ..addField('y', $Int)
     ..addMethod('length', [], $Double)
@@ -40,32 +48,29 @@ StructDecl composePoint() {
                   new $Var('other', point_t), new FieldPart('y', $Int)))
         ])),
       ]));
-  return point_t;
 }
 
-ClassDecl composeAnimal() {
-  var animal_t = new ClassDecl('Animal');
-  animal_t.addMethod('eat', [], $Void)
-    ..addExpSt(new FuncCall($Void, 'print', [newString("yum yum!")]));
-  return animal_t;
+void composeAnimal() {
+  animal_t.addMethodPrototype('eat', [], $Void);
+  // ..addExpSt(new FuncCall($Void, 'print', [newString("yum yum!")]));
+}
+
+void composeDog() {
+  dog_t
+    ..interface.add(animal_t)
+    ..addMethod('eat', [], $Void)
+        .addExpSt(new FuncCall($Void, 'print', [newString("yum yum!")]))
+    ..addMethod('bark', [], $Void)
+        .addExpSt(new FuncCall($Void, 'print', [newString("bow bow!")]))
+    ..addInit([]);
 }
 
 main() {
   setupCore();
-  CompilationUnit unit = new CompilationUnit('point', [core], {}, []);
 
-  unit.addType(composePoint());
-  unit.addType(composeAnimal());
-
-  final add_f = new Func(
-      'add',
-      [new Param('a', $Int), new Param('b', $Int)],
-      $Int,
-      [
-        new ReturnStatement(
-            new AddExpression($Int, new $Var('a', $Int), new $Var('b', $Int)))
-      ]);
-  unit.functions.add(add_f);
+  composePoint();
+  composeAnimal();
+  composeDog();
 
   print(compileUnit(unit).toCodeSegment());
 }
@@ -77,4 +82,16 @@ class Point {
 
   fn length: Int => (x * x + y * y).sqrt.toInt;
 }
+ */
+
+/*
+  final add_f = new Func(
+      'add',
+      [new Param('a', $Int), new Param('b', $Int)],
+      $Int,
+      [
+        new ReturnStatement(
+            new AddExpression($Int, new $Var('a', $Int), new $Var('b', $Int)))
+      ]);
+  unit.functions.add(add_f);
  */

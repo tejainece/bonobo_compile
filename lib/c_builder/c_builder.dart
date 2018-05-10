@@ -197,6 +197,26 @@ class BinaryExpression extends Expression {
   }
 }
 
+class NewAllocExpression extends Expression {
+  final TypeName type;
+  final List<Expression> args;
+  const NewAllocExpression(this.type, this.args);
+
+  @override
+  String toCodeSegment() =>
+      'new ${type.toCodeSegment()}(${args.map((e) => e.toCodeSegment()).join(', ')})';
+}
+
+class ConstructorCallExpression extends Expression {
+  final TypeName type;
+  final List<Expression> args;
+  const ConstructorCallExpression(this.type, [this.args = const []]);
+
+  @override
+  String toCodeSegment() =>
+      '${type.toCodeSegment()}(${args.map((e) => e.toCodeSegment()).join(', ')})';
+}
+
 class IntLiteral extends Expression {
   final int value;
   const IntLiteral(this.value);
@@ -273,6 +293,30 @@ class AssignStatement extends Statement {
   }
 }
 
+class VarDeclStatement extends Statement {
+  final TypeName type;
+  final String name;
+  final bool initialize;
+  final List<Expression> args;
+  VarDeclStatement(this.type, this.name,
+      {this.initialize: false, this.args: const []});
+
+  @override
+  String toCodeSegment() {
+    var sb = new StringBuffer();
+    sb.write(type.toCodeSegment());
+    sb.write(' ');
+    sb.write(name);
+    if(initialize) {
+      sb.write('(');
+      sb.write(args.map((e) => e.toCodeSegment()).join(', '));
+      sb.write(')');
+    }
+    sb.write(';');
+    return sb.toString();
+  }
+}
+
 class RawStatement extends Statement {
   final RawExpression expression;
   RawStatement(this.expression);
@@ -286,19 +330,45 @@ class RawStatement extends Statement {
   }
 }
 
+class FuncPrototype implements Code {
+  final bool isVirtual;
+  final TypeName returns;
+  final String name;
+  final List<Parameter> parameters;
+  FuncPrototype(this.returns, this.name, this.parameters, {this.isVirtual});
+
+  @override
+  void toC(CodeBuffer buf) {
+    if(isVirtual) buf.write('virtual ');
+    buf.write(returns.toCodeSegment());
+    buf.write(' ');
+    buf.write(name);
+    buf.write('(');
+    buf.write(parameters.map((p) => p.toCodeSegment()).join(', '));
+    buf.writeln(');');
+  }
+
+  @override
+  String toCodeSegment() {
+    var cb = new CodeBuffer();
+    toC(cb);
+    return cb.toString();
+  }
+}
+
 class Func implements Code {
   final bool isStatic;
-  final String type;
+  final TypeName returns;
   final String name;
   final List<Parameter> parameters;
   final List<Statement> body;
-  Func(this.type, this.name, this.parameters, this.body,
+  Func(this.returns, this.name, this.parameters, this.body,
       {this.isStatic: false});
 
   @override
   void toC(CodeBuffer buf) {
     if (isStatic) buf.write('static ');
-    buf.write(type);
+    buf.write(returns.toCodeSegment());
     buf.write(' ');
     buf.write(name);
     buf.write('(');
@@ -320,7 +390,7 @@ class Func implements Code {
 }
 
 class Parameter implements Code {
-  String type;
+  TypeName type;
   String name;
   Parameter(this.type, this.name);
 
@@ -332,7 +402,7 @@ class Parameter implements Code {
   @override
   String toCodeSegment() {
     var sb = new StringBuffer();
-    sb.write(type);
+    sb.write(type.toCodeSegment());
     sb.write(' ');
     sb.write(name);
     return sb.toString();
@@ -345,25 +415,27 @@ class Struct implements Code {
   final List<Field> fields;
   // TODO constructors
   final List<Func> methods;
+  final List<FuncPrototype> methodPrototypes;
 
   Struct(this.name, List<Field> fields, List<Func> methods,
-      {List<TypeName> inherits})
+      {List<TypeName> inherits, List<FuncPrototype> methodPrototypes})
       : fields = fields ?? <Field>[],
         methods = methods ?? <Func>[],
-        inherits = inherits ?? [];
-  void addField(String type, String name) => fields.add(new Field(type, name));
+        inherits = inherits ?? [],
+        methodPrototypes = methodPrototypes ?? [];
 
   @override
   void toC(CodeBuffer buf) {
     buf.write('struct $name');
-    if(inherits.length != 0) {
+    if (inherits.length != 0) {
       buf.write(': ');
       buf.write(inherits.map((i) => i.toCodeSegment()).join(", "));
     }
     buf.writeln(' {');
     buf.indent();
-    fields.map((f) => '${f.type} ${f.name};').forEach(buf.writeln);
+    fields.map((f) => f.toCodeSegment()).forEach(buf.writeln);
     methods.forEach((s) => s.toC(buf));
+    methodPrototypes.forEach((s) => s.toC(buf));
     buf.outdent();
     buf.writeln('};');
   }
@@ -377,15 +449,37 @@ class Struct implements Code {
 }
 
 class Field implements Code {
-  String type;
-  String name;
-  Field(this.type, this.name);
+  final bool isStatic;
+  final bool isConstExpr;
+  final bool isConst;
+  final TypeName type;
+  final String name;
+  final Expression initialization;
+  Field(this.type, this.name,
+      {this.isStatic: false, this.isConstExpr: false, this.isConst: false, this.initialization});
 
   @override
-  void toC(CodeBuffer buf) {}
+  void toC(CodeBuffer buf) {
+    buf.write(toCodeSegment());
+  }
 
   @override
-  String toCodeSegment() {}
+  String toCodeSegment() {
+    var sb = new StringBuffer();
+    if (isStatic) sb.write('static ');
+    if (isConst)
+      sb.write('const');
+    else if (isConstExpr) sb.write('constexpr ');
+    sb.write(type.toCodeSegment());
+    sb.write(' ');
+    sb.write(name);
+    if(initialization != null) {
+      sb.write(' = ');
+      sb.write(initialization.toCodeSegment());
+    }
+    sb.write(';');
+    return sb.toString();
+  }
 }
 
 class Enum implements Code {
@@ -448,10 +542,10 @@ class IntTemplateArg implements TemplateArg {
   }
 }
 
-class TypeName implements Code {
+class Template implements Code {
   String name;
   List<TemplateArg> args;
-  TypeName(this.name, [this.args = const []]);
+  Template(this.name, [this.args = const []]);
 
   @override
   String toCodeSegment() {
@@ -460,6 +554,29 @@ class TypeName implements Code {
     if (args.length != 0) {
       sb.write('<');
       sb.write(args.map((a) => a.toCodeSegment()).join(', '));
+      sb.write('>');
+    }
+    return sb.toString();
+  }
+
+  @override
+  void toC(CodeBuffer buf) {
+    buf.write(toCodeSegment());
+  }
+}
+
+class TypeName implements Code {
+  final String name;
+  final List<TypeName> templateArgs;
+  TypeName(this.name, this.templateArgs);
+
+  @override
+  String toCodeSegment() {
+    var sb = new StringBuffer();
+    sb.write(name);
+    if (templateArgs.length != 0) {
+      sb.write('<');
+      sb.write(templateArgs.map((a) => a.toCodeSegment()).join(', '));
       sb.write('>');
     }
     return sb.toString();

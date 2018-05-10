@@ -10,26 +10,27 @@ abstract class TypeDecl implements Sxst {
   // TODO static methods
   bool isSameType(TypeDecl other);
   void addField(String name, TypeDecl type);
-  MethodPrototype addMethod(
+  MethodPrototype addMethodPrototype(
       String name, List<Param> parameters, TypeDecl returnType);
   // TODO opMethod
   $Var mkV(String name); // TODO
   Field fieldByName(String name);
   MethodPrototype methodByInvocation(String name, List<Expression> args);
+  bool get hasBase;
 }
 
 abstract class TypeDeclMixin implements TypeDecl {
   final List<Field> fields = [];
-  final List<Method> methods = [];
-  final List<SxstOvOp> opMethods = [];
+  final List<MethodPrototype> methods = [];
+  final List<OvOpPrototype> opMethods = [];
   void addField(String name, TypeDecl type) {
     fields.add(new Field(this, name, type));
   }
 
-  MethodPrototype addMethod(
+  MethodPrototype addMethodPrototype(
       String name, List<Param> parameters, TypeDecl returnType) {
     if (returnType == $Self) returnType = this;
-    var meth = new Method(this, name, parameters, returnType, []);
+    var meth = new MethodPrototype(this, name, parameters, returnType);
     methods.add(meth);
     return meth;
   }
@@ -44,6 +45,9 @@ abstract class TypeDeclMixin implements TypeDecl {
       methods
           .where((m) => m.name == name)
           .firstWhere((m) => m.isInvokable(args), orElse: () => null);
+
+  @override
+  bool get hasBase => interface.isNotEmpty;
 }
 
 class StructInterfaceDecl extends Object
@@ -64,17 +68,84 @@ class ClassInterfaceDecl extends Object with TypeDeclMixin implements TypeDecl {
       other is ClassInterfaceDecl && other.name == name;
 }
 
+abstract class MixinTypeDecl implements TypeDecl {
+  List<MixinTypeDecl> get mixins; // TODO
+  InitCall mk(String name, List<Expression> args);
+  Method addMethod(String name, List<Param> parameters, TypeDecl returnType);
+  MethodPrototype addMethodPrototype(
+      String name, List<Param> parameters, TypeDecl returnType);
+  // TODO opMethod
+  Method methodByInvocation(String name, List<Expression> args);
+}
+
+abstract class MixinTypeDeclMixin implements MixinTypeDecl {
+  final List<Field> fields = [];
+  final List<MethodPrototype> methods = [];
+  final List<OvOpPrototype> opMethods = [];
+
+  void addField(String name, TypeDecl type) {
+    fields.add(new Field(this, name, type));
+  }
+
+  Method addMethod(String name, List<Param> parameters, TypeDecl returnType) {
+    if (returnType == $Self) returnType = this;
+    var meth = new Method(this, name, parameters, returnType, []);
+    methods.add(meth);
+    return meth;
+  }
+
+  MethodPrototype addMethodPrototype(
+      String name, List<Param> parameters, TypeDecl returnType) {
+    if (returnType == $Self) returnType = this;
+    var meth = new MethodPrototype(this, name, parameters, returnType);
+    methods.add(meth);
+    return meth;
+  }
+
+  // TODO opMethod
+  $Var mkV(String name) => new $Var(name, this);
+  InitCall mk(String name, List<Expression> args) =>
+      new InitCall(name, this, args);
+  Field fieldByName(String name) =>
+      fields.firstWhere((f) => f.name == name, orElse: () => null);
+  Method methodByInvocation(String name, List<Expression> args) => methods
+      .where((m) => m.name == name)
+      .firstWhere((m) => m.isInvokable(args), orElse: () => null);
+  bool get hasBase => interface.isNotEmpty || mixins.isNotEmpty;
+}
+
+class StructMixinTypeDecl extends Object
+    with MixinTypeDeclMixin
+    implements MixinTypeDecl, StructInterfaceDecl {
+  final String name;
+  final List<StructInterfaceDecl> interface = [];
+  final List<StructMixinTypeDecl> mixins = [];
+  StructMixinTypeDecl(this.name);
+  bool isSameType(TypeDecl other) =>
+      other is StructMixinTypeDecl && other.name == name;
+}
+
+class ClassMixinTypeDecl extends Object
+    with MixinTypeDeclMixin
+    implements MixinTypeDecl, ClassInterfaceDecl {
+  final String name;
+  final List<ClassInterfaceDecl> interface = [];
+  final List<ClassMixinTypeDecl> mixins = [];
+  ClassMixinTypeDecl(this.name);
+  bool isSameType(TypeDecl other) =>
+      other is ClassMixinTypeDecl && other.name == name;
+}
+
 abstract class ConcreteTypeDecl implements TypeDecl {
-  List<TypeDecl> get mixins;
+  List<TypeDecl> get mixins; // TODO
   List<Method> get methods;
   List<SxstOvOp> get opMethods;
   List<Init> get initializers;
   Init addInit(List<Param> parameters, {String name: ""});
   InitCall mk(String name, List<Expression> args);
-  MethodPrototype addMethod(
-      String name, List<Param> parameters, TypeDecl returnType);
+  Method addMethod(String name, List<Param> parameters, TypeDecl returnType);
   // TODO opMethod
-  MethodPrototype methodByInvocation(String name, List<Expression> args);
+  Method methodByInvocation(String name, List<Expression> args);
 }
 
 abstract class ConcreteTypeDeclMixin implements ConcreteTypeDecl {
@@ -92,8 +163,12 @@ abstract class ConcreteTypeDeclMixin implements ConcreteTypeDecl {
     fields.add(new Field(this, name, type));
   }
 
-  MethodPrototype addMethod(
+  MethodPrototype addMethodPrototype(
       String name, List<Param> parameters, TypeDecl returnType) {
+    throw new Exception();
+  }
+
+  Method addMethod(String name, List<Param> parameters, TypeDecl returnType) {
     if (returnType == $Self) returnType = this;
     var meth = new Method(this, name, parameters, returnType, []);
     methods.add(meth);
@@ -106,28 +181,28 @@ abstract class ConcreteTypeDeclMixin implements ConcreteTypeDecl {
       new InitCall(name, this, args);
   Field fieldByName(String name) =>
       fields.firstWhere((f) => f.name == name, orElse: () => null);
-  MethodPrototype methodByInvocation(String name, List<Expression> args) =>
-      methods
-          .where((m) => m.name == name)
-          .firstWhere((m) => m.isInvokable(args), orElse: () => null);
+  Method methodByInvocation(String name, List<Expression> args) => methods
+      .where((m) => m.name == name)
+      .firstWhere((m) => m.isInvokable(args), orElse: () => null);
+  bool get hasBase => interface.isNotEmpty || mixins.isNotEmpty;
 }
 
 class StructDecl extends Object
     with ConcreteTypeDeclMixin
-    implements ConcreteTypeDecl {
+    implements ConcreteTypeDecl, StructMixinTypeDecl {
   final String name;
   final List<StructInterfaceDecl> interface = [];
-  final List<StructDecl> mixins = []; // TODO mixin type
+  final List<StructMixinTypeDecl> mixins = [];
   StructDecl(this.name);
   bool isSameType(TypeDecl other) => other is StructDecl && other.name == name;
 }
 
 class ClassDecl extends Object
     with ConcreteTypeDeclMixin
-    implements ConcreteTypeDecl {
+    implements ConcreteTypeDecl, ClassMixinTypeDecl {
   final String name;
-  final List<StructInterfaceDecl> interface = [];
-  final List<StructDecl> mixins = []; // TODO mixin type
+  final List<ClassInterfaceDecl> interface = [];
+  final List<ClassMixinTypeDecl> mixins = [];
   // TODO deinitializer
   ClassDecl(this.name);
   bool isSameType(TypeDecl other) => other is StructDecl && other.name == name;

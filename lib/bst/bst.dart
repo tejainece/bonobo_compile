@@ -4,10 +4,10 @@ part 'statement.dart';
 
 class CompilationUnit {
   final String name;
-  final List<CompilationUnit> imports;
-  final Map<String, TypeDecl> types;
-  final List<Func> functions;
-  const CompilationUnit(this.name, this.imports, this.types, this.functions);
+  final List<CompilationUnit> imports = [];
+  final Map<String, TypeDecl> types = {};
+  final List<Func> functions = [];
+  CompilationUnit(this.name);
   void addType(TypeDecl type) {
     // TODO throw if type with name already exists
     types[type.name] = type;

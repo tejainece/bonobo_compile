@@ -13,13 +13,30 @@ c.CompilationUnit compileUnit(CompilationUnit bst) {
 }
 
 c.Struct compileTypeDeclaration(TypeDecl type) {
-  var struct;
-  if (type is ClassDecl) {
-    struct = new c.Struct(type.name, [], [],
-        inherits: [compileExtendType($ReferencedObject)]);
+  var struct = new c.Struct(type.name, [], []);
+  if (type.hasBase) {
+    for (TypeDecl interface in type.interface) {
+      struct.inherits.add(compileExtendType(interface));
+    }
+    if (type is MixinTypeDecl) {
+      for (TypeDecl interface in type.mixins) {
+        struct.inherits.add(compileExtendType(interface));
+      }
+    }
   } else {
-    struct =
-        new c.Struct(type.name, [], [], inherits: [compileExtendType($Object)]);
+    if (type is ClassDecl ||
+        type is ClassMixinTypeDecl ||
+        type is ClassInterfaceDecl) {
+      struct = new c.Struct(type.name, [], [],
+          inherits: [compileExtendType($ReferencedObject)]);
+    } else if (type is StructDecl ||
+        type is StructMixinTypeDecl ||
+        type is StructInterfaceDecl) {
+      struct = new c.Struct(type.name, [], [],
+          inherits: [compileExtendType($Object)]);
+    } else {
+      throw new Exception();
+    }
   }
   for (Field field in type.fields) {
     final cField = new c.Field(compileVarType(field.type), field.name);
@@ -30,18 +47,40 @@ c.Struct compileTypeDeclaration(TypeDecl type) {
       struct.methods.add(compileClassInitMethod(method));
     }
     // TODO deinitializer
-  } else {
+  } else if (type is StructDecl) {
     for (Init method in type.initializers) {
       struct.methods.add(compileStructInitMethod(method));
     }
   }
-  for (Method method in type.methods) {
-    struct.methods.add(compileMethod(method));
+  for (MethodPrototype method in type.methods) {
+    if (method is Method) {
+      struct.methods.add(compileMethod(method));
+    } else {
+      struct.methodPrototypes.add(compileMethodPrototype(method));
+    }
   }
   for (SxstOvOp method in type.opMethods) {
     struct.methods.add(compileOpMethod(method));
   }
+  struct.methods.add(new c.Func(compileVarType($Type), 'runtimeType', [],
+      [new c.ReturnStatement(new c.RawExpression('xaneType'))]));
+  struct.fields.add(new c.Field(compileVarType($Type), 'xaneType',
+      isStatic: true,
+      isConstExpr: true,
+      initialization: new c.FuncCall('Type', [
+        new c.StringLiteral("Sample"),
+        new c.StringLiteral("Sample"),
+        new c.StringLiteral(type.name)
+      ])));
   return struct;
+}
+
+c.FuncPrototype compileMethodPrototype(MethodPrototype bst) {
+  final params = bst.parameters.map((Param param) {
+    return new c.Parameter(compileVarType(param.type), param.name);
+  }).toList();
+  return new c.FuncPrototype(compileVarType(bst.returnType), bst.name, params,
+      isVirtual: true);
 }
 
 c.Func compileMethod(Method bst) {
@@ -57,10 +96,14 @@ c.Func compileStructInitMethod(Init bst) {
     return new c.Parameter(compileVarType(param.type), param.name);
   }).toList();
   final List<c.Statement> sts = [];
-  sts.add(new c.RawStatement(
-      new c.RawExpression("${compileVarType(bst.parent)} self")));
-  sts.addAll(bst.statements.map(compileStatement));
-  sts.add(new c.ReturnStatement(new c.RawExpression('self')));
+  if (bst.statements.isNotEmpty) {
+    sts.add(new c.VarDeclStatement(compileVarType(bst.parent), 'self'));
+    sts.addAll(bst.statements.map(compileStatement));
+    sts.add(new c.ReturnStatement(new c.RawExpression('self')));
+  } else {
+    sts.add(new c.ReturnStatement(
+        new c.ConstructorCallExpression(compileVarType(bst.parent))));
+  }
   return new c.Func(compileVarType(bst.parent),
       "init" + (bst.name.isEmpty ? "" : "_${bst.name}"), params, sts,
       isStatic: true);
@@ -71,10 +114,17 @@ c.Func compileClassInitMethod(Init bst) {
     return new c.Parameter(compileVarType(param.type), param.name);
   }).toList();
   final List<c.Statement> sts = [];
-  sts.add(new c.RawStatement(new c.RawExpression(
-      "${compileVarType(bst.parent)} self(new ${compileExtendType(bst.parent)}())")));
-  sts.addAll(bst.statements.map(compileStatement));
-  sts.add(new c.ReturnStatement(new c.RawExpression('self')));
+  if (bst.statements.isNotEmpty) {
+    sts.add(new c.VarDeclStatement(compileVarType(bst.parent), 'self',
+        initialize: true,
+        args: [new c.NewAllocExpression(compileVarType(bst.parent), [])]));
+    sts.addAll(bst.statements.map(compileStatement));
+    sts.add(new c.ReturnStatement(new c.RawExpression('self')));
+  } else {
+    sts.add(new c.ReturnStatement(new c.ConstructorCallExpression(
+        compileVarType(bst.parent),
+        [new c.NewAllocExpression(compileVarType(bst.parent), [])])));
+  }
   return new c.Func(compileVarType(bst.parent),
       "init" + (bst.name.isEmpty ? "" : "_${bst.name}"), params, sts,
       isStatic: true);
@@ -179,15 +229,15 @@ c.MemberPart compileMemberPart(MemberPart part) {
   throw new Exception('Unknown member part ${part}!');
 }
 
-String compileVarType(TypeDecl type) {
+c.TypeName compileVarType(TypeDecl type) {
   // TODO implement generics
-  if (type is! ClassDecl) return type.name;
-  return "Reference<${type.name}>";
+  if (type is! ClassDecl) return compileExtendType(type);
+  return new c.TypeName('Reference', [compileExtendType(type)]);
 }
 
 c.TypeName compileExtendType(TypeDecl type) {
   // TODO implement generics
-  return new c.TypeName(type.name);
+  return new c.TypeName(type.name, []);
 }
 
 c.Expression compileVariable($Var variable) =>
