@@ -1,6 +1,9 @@
-part 'types.dart';
 part 'core.dart';
+part 'fields.dart';
+part 'generics.dart';
 part 'statement.dart';
+part 'var.dart';
+part 'types.dart';
 
 class CompilationUnit {
   final String name;
@@ -19,20 +22,20 @@ abstract class Sxst {}
 class Func implements Sxst {
   String name;
   List<Param> parameters;
-  TypeDecl returnType;
+  VarType returnType;
   final Block body;
   Func(this.name, this.parameters, this.returnType, this.body);
 }
 
 class Param implements Sxst {
   String name;
-  TypeDecl type;
+  VarType type;
 
   Param(this.name, this.type);
 }
 
 abstract class Expression implements Sxst {
-  TypeDecl get type;
+  VarType get type;
 
   const Expression();
 
@@ -40,7 +43,7 @@ abstract class Expression implements Sxst {
     return addOp(other);
   }
 
-  Expression addOp(Expression other, {TypeDecl resType}) {
+  Expression addOp(Expression other, {VarType resType}) {
     return new AddExpression(resType ?? type, this, other);
   }
 
@@ -48,7 +51,7 @@ abstract class Expression implements Sxst {
     return mulOp(other);
   }
 
-  Expression mulOp(Expression other, {TypeDecl resType}) {
+  Expression mulOp(Expression other, {VarType resType}) {
     return new MulExpression(resType ?? type, this, other);
   }
 
@@ -76,7 +79,7 @@ abstract class Expression implements Sxst {
 class AddExpression extends Expression {
   final Expression left;
   final Expression right;
-  final TypeDecl type;
+  final VarType type;
 
   const AddExpression(this.type, this.left, this.right);
 }
@@ -84,7 +87,7 @@ class AddExpression extends Expression {
 class MulExpression extends Expression {
   final Expression left;
   final Expression right;
-  final TypeDecl type;
+  final VarType type;
 
   const MulExpression(this.type, this.left, this.right);
 }
@@ -92,8 +95,8 @@ class MulExpression extends Expression {
 // TODO function call
 
 abstract class MemberPart implements Sxst {
-  TypeDecl get type;
-  TypeDecl get nextType;
+  VarType get type;
+  VarType get nextType;
 
   void field(String name);
 
@@ -101,11 +104,11 @@ abstract class MemberPart implements Sxst {
 }
 
 class FieldPart implements MemberPart {
-  final TypeDecl type;
+  final VarType type;
   final String name;
   MemberPart next;
   FieldPart(this.name, this.type, [this.next]);
-  TypeDecl get nextType => next != null ? next.type : type;
+  VarType get nextType => next != null ? next.type : type;
   void field(String name) {
     if (next != null) {
       next.field(name);
@@ -129,12 +132,15 @@ class FieldPart implements MemberPart {
 }
 
 class CallPart implements MemberPart {
-  final TypeDecl type;
   final String name;
+  final List<VarType> templates;
+  final VarType type;
   final List<Expression> args;
   MemberPart next;
-  CallPart(this.name, this.type, this.args, [this.next]);
-  TypeDecl get nextType => next != null ? next.type : type;
+  CallPart(this.name, this.type, this.args,
+      {this.next, List<VarType> templates})
+      : templates = templates ?? [];
+  VarType get nextType => next != null ? next.type : type;
   void field(String name) {
     if (next != null) {
       next.field(name);
@@ -163,8 +169,8 @@ class MemberAccess extends Expression {
   final Expression start;
   final MemberPart next;
   MemberAccess(this.start, this.next);
-  TypeDecl get type => next.nextType;
-  TypeDecl get myType => start.type;
+  VarType get type => next.nextType;
+  VarType get myType => start.type;
   MemberAccess field(String name) {
     next.field(name);
     return this;
@@ -177,35 +183,38 @@ class MemberAccess extends Expression {
 }
 
 class FuncCall extends Expression {
-  final TypeDecl type;
   final String name;
+  final List<VarType> templates;
+  final VarType type;
   final List<Expression> args;
-  FuncCall(this.type, this.name, this.args);
+  FuncCall(this.name, this.type, this.args, {List<VarType> templates})
+      : templates = templates ?? [];
 }
 
 class InitCall extends Expression {
-  final TypeDecl type;
   final String name;
+  final List<VarType> templates;
+  final VarType type;
   final List<Expression> args;
-  InitCall(this.name, this.type, this.args);
-
+  InitCall(this.name, this.type, this.args, {List<VarType> templates})
+      : templates = templates ?? [];
   String get methodName => name.isEmpty ? "init" : "init_${name}";
 }
 
 class IntLiteral extends Expression {
   final int value;
   const IntLiteral(this.value);
-  TypeDecl get type => $Int;
+  VarType get type => new VarType($Int);
 }
 
 class StringLiteral extends Expression {
   final String value;
   const StringLiteral(this.value);
-  TypeDecl get type => $String;
+  VarType get type => new VarType($String);
 }
 
 class $Var extends Expression {
   final String name;
-  final TypeDecl type;
+  final VarType type;
   const $Var(this.name, this.type);
 }

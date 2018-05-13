@@ -64,7 +64,17 @@ void composeDog() {
         .addExpSt(new FuncCall($Void, 'print', [newString("yum yum!")]))
     ..addMethod('bark', [], $Void)
         .addExpSt(new FuncCall($Void, 'print', [newString("bow bow!")]))
-    ..addInit([]);
+    ..addInit([])
+    ..deinitializer = new Deinit(
+        dog_t,
+        new Block([
+          new ExpressionStatement(
+              new FuncCall($Void, 'print', [newString("Dog deinitialized!")]))
+        ]));
+}
+
+void x() {
+  // TODO
 }
 
 main() {

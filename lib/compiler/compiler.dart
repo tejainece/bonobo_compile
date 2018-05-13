@@ -2,9 +2,10 @@ import 'package:backend/c_builder/c_builder.dart' as c;
 import 'package:backend/bst/bst.dart';
 
 c.CompilationUnit compileUnit(CompilationUnit bst) {
-  final ret = new c.CompilationUnit([], [], []);
+  final ret = new c.CompilationUnit([], [], [], []);
   for (TypeDecl type in bst.types.values) {
     ret.structs.add(compileTypeDeclaration(type));
+    ret.varDeclStatement.add(compileXaneType(type));
   }
   for (Func fn in bst.functions) {
     ret.functions.add(compileFunction(fn));
@@ -12,14 +13,19 @@ c.CompilationUnit compileUnit(CompilationUnit bst) {
   return ret;
 }
 
+c.VarDeclStatement compileXaneType(TypeDecl type) {
+  return new c.VarDeclStatement(compileVarType($Type), 'xaneType',
+      isConstExpr: true, parent: compileUnrefClassType(type));
+}
+
 c.Struct compileTypeDeclaration(TypeDecl type) {
   var struct = new c.Struct(type.name, [], []);
   if (type.hasBase) {
-    for (TypeDecl interface in type.interface) {
+    for (InterfaceInherit interface in type.interface) {
       struct.inherits.add(compileExtendType(interface));
     }
     if (type is MixinTypeDecl) {
-      for (TypeDecl interface in type.mixins) {
+      for (InterfaceInherit interface in type.mixins) {
         struct.inherits.add(compileExtendType(interface));
       }
     }
@@ -28,12 +34,12 @@ c.Struct compileTypeDeclaration(TypeDecl type) {
         type is ClassMixinTypeDecl ||
         type is ClassInterfaceDecl) {
       struct = new c.Struct(type.name, [], [],
-          inherits: [compileExtendType($ReferencedObject)]);
+          inherits: [compileUnrefClassType($ReferencedObject)]);
     } else if (type is StructDecl ||
         type is StructMixinTypeDecl ||
         type is StructInterfaceDecl) {
-      struct = new c.Struct(type.name, [], [],
-          inherits: [compileExtendType($Object)]);
+      struct =
+          new c.Struct(type.name, [], [], inherits: [compileVarType($Object)]);
     } else {
       throw new Exception();
     }
@@ -48,7 +54,7 @@ c.Struct compileTypeDeclaration(TypeDecl type) {
     }
     if (type.deinitializer != null) {
       struct.deconstructor = new c.Deconstructor(
-          '~${type.name}', compileBlock(type.deinitializer.body));
+          '${type.name}', compileBlock(type.deinitializer.body));
     }
   } else if (type is StructDecl) {
     for (Init method in type.initializers) {
@@ -83,7 +89,7 @@ c.FuncPrototype compileMethodPrototype(MethodPrototype bst) {
     return new c.Parameter(compileVarType(param.type), param.name);
   }).toList();
   return new c.FuncPrototype(compileVarType(bst.returnType), bst.name, params,
-      isVirtual: true);
+      isVirtual: true, isPureVirtual: true);
 }
 
 c.Func compileMethod(Method bst) {
@@ -123,7 +129,9 @@ c.Func compileClassInitMethod(Init bst) {
     body = compileBlock(bst.body, preC: [
       new c.VarDeclStatement(compileVarType(bst.parent), 'self',
           initialize: true,
-          args: [new c.NewAllocExpression(compileVarType(bst.parent), [])])
+          args: [
+            new c.NewAllocExpression(compileUnrefClassType(bst.parent), [])
+          ])
     ], postC: [
       new c.ReturnStatement(new c.RawExpression('self'))
     ]);
@@ -131,7 +139,7 @@ c.Func compileClassInitMethod(Init bst) {
     body = new c.Block([
       new c.ReturnStatement(new c.ConstructorCallExpression(
           compileVarType(bst.parent),
-          [new c.NewAllocExpression(compileVarType(bst.parent), [])]))
+          [new c.NewAllocExpression(compileUnrefClassType(bst.parent), [])]))
     ]);
   }
   return new c.Func(compileVarType(bst.parent),
@@ -175,13 +183,15 @@ c.Func compileFunction(Func bst) {
 c.Block compileBlock(Block block,
     {List<c.Statement> preC: const [], List<c.Statement> postC: const []}) {
   var ret = new c.Block([]);
-  for(Statement st in block.statements) {
-    if(st is Block) {
+  if (preC.isNotEmpty) ret.statements.addAll(preC);
+  for (Statement st in block.statements) {
+    if (st is Block) {
       ret.statements.add(compileBlock(st));
     } else {
       ret.statements.add(compileStatement(st));
     }
   }
+  if (postC.isNotEmpty) ret.statements.addAll(postC);
   return ret;
 }
 
@@ -250,15 +260,23 @@ c.MemberPart compileMemberPart(MemberPart part) {
   throw new Exception('Unknown member part ${part}!');
 }
 
-c.TypeName compileVarType(TypeDecl type) {
+c.TypeName compileVarType(DeclType type) {
+  if(type is GenericPart) {
+    // TODO
+  }
   // TODO implement generics
   if (type is! ClassDecl) return compileExtendType(type);
   return new c.TypeName('Reference', [compileExtendType(type)]);
 }
 
-c.TypeName compileExtendType(TypeDecl type) {
+c.TypeName compileUnrefClassType(ClassInterfaceDecl type) {
   // TODO implement generics
   return new c.TypeName(type.name, []);
+}
+
+c.TypeName compileExtendType(InterfaceInherit type) {
+  // TODO implement generics
+  return new c.TypeName(type.type.name, []);
 }
 
 c.Expression compileVariable($Var variable) =>

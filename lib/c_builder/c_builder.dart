@@ -10,7 +10,9 @@ class CompilationUnit implements Code {
   final List<Struct> structs;
   final List<Enum> enums;
   final List<Func> functions;
-  CompilationUnit(this.structs, this.enums, this.functions);
+  final List<VarDeclStatement> varDeclStatement;
+  CompilationUnit(
+      this.structs, this.enums, this.functions, this.varDeclStatement);
 
   @override
   String toCodeSegment() {
@@ -24,6 +26,10 @@ class CompilationUnit implements Code {
     structs.forEach((s) => s.toC(buf));
     enums.forEach((s) => s.toC(buf));
     functions.forEach((s) => s.toC(buf));
+    for (VarDeclStatement s in varDeclStatement) {
+      s.toC(buf);
+      buf.writeln();
+    }
   }
 }
 
@@ -249,7 +255,7 @@ class Block implements Statement {
   void toC(CodeBuffer buf) {
     buf.writeln('{');
     buf.indent();
-    for(Statement st in statements) {
+    for (Statement st in statements) {
       st.toC(buf);
       buf.writeln();
     }
@@ -318,18 +324,31 @@ class AssignStatement extends Statement {
 }
 
 class VarDeclStatement extends Statement {
+  final bool isConstExpr;
+  final bool isConst;
   final TypeName type;
+  final TypeName parent;
   final String name;
   final bool initialize;
   final List<Expression> args;
   VarDeclStatement(this.type, this.name,
-      {this.initialize: false, this.args: const []});
+      {this.initialize: false,
+      this.args: const [],
+      this.isConstExpr: false,
+      this.isConst: false,
+      this.parent});
 
   @override
   String toCodeSegment() {
     var sb = new StringBuffer();
+    if (isConstExpr) sb.write('constexpr ');
+    if (isConst) sb.write('const ');
     sb.write(type.toCodeSegment());
     sb.write(' ');
+    if (parent != null) {
+      sb.write(parent.toCodeSegment());
+      sb.write('::');
+    }
     sb.write(name);
     if (initialize) {
       sb.write('(');
@@ -356,10 +375,12 @@ class RawStatement extends Statement {
 
 class FuncPrototype implements Code {
   final bool isVirtual;
+  final bool isPureVirtual;
   final TypeName returns;
   final String name;
   final List<Parameter> parameters;
-  FuncPrototype(this.returns, this.name, this.parameters, {this.isVirtual});
+  FuncPrototype(this.returns, this.name, this.parameters,
+      {this.isVirtual: false, this.isPureVirtual: false});
 
   @override
   void toC(CodeBuffer buf) {
@@ -369,7 +390,9 @@ class FuncPrototype implements Code {
     buf.write(name);
     buf.write('(');
     buf.write(parameters.map((p) => p.toCodeSegment()).join(', '));
-    buf.writeln(');');
+    buf.write(')');
+    if (isPureVirtual) buf.write(" = 0");
+    buf.writeln(';');
   }
 
   @override
@@ -384,8 +407,7 @@ class Deconstructor implements Code {
   final bool isVirtual;
   final String name;
   final Block body;
-  Deconstructor(this.name, this.body,
-      {this.isVirtual: false});
+  Deconstructor(this.name, this.body, {this.isVirtual: false});
 
   @override
   void toC(CodeBuffer buf) {
@@ -454,6 +476,7 @@ class Parameter implements Code {
 
 class Struct implements Code {
   final String name;
+  final List<TemplateArg> templateArgs;
   final List<TypeName> inherits;
   final List<Field> fields;
   final List<Func> methods;
@@ -461,14 +484,22 @@ class Struct implements Code {
   Deconstructor deconstructor;
 
   Struct(this.name, List<Field> fields, List<Func> methods,
-      {List<TypeName> inherits, List<FuncPrototype> methodPrototypes})
+      {List<TypeName> inherits,
+      List<FuncPrototype> methodPrototypes,
+      List<TemplateArg> templateArgs})
       : fields = fields ?? <Field>[],
         methods = methods ?? <Func>[],
         inherits = inherits ?? [],
-        methodPrototypes = methodPrototypes ?? [];
+        methodPrototypes = methodPrototypes ?? [],
+        templateArgs = templateArgs ?? [];
 
   @override
   void toC(CodeBuffer buf) {
+    if(templateArgs.isNotEmpty) {
+      buf.write('template<');
+      buf.write(templateArgs.map((t) => t.toCodeSegment()).join(', '));
+      buf.writeln('>');
+    }
     buf.write('struct $name');
     if (inherits.length != 0) {
       buf.write(': ');
@@ -479,7 +510,7 @@ class Struct implements Code {
     fields.map((f) => f.toCodeSegment()).forEach(buf.writeln);
     methods.forEach((s) => s.toC(buf));
     methodPrototypes.forEach((s) => s.toC(buf));
-    if(deconstructor != null) deconstructor.toC(buf);
+    if (deconstructor != null) deconstructor.toC(buf);
     buf.outdent();
     buf.writeln('};');
   }
@@ -581,29 +612,6 @@ class IntTemplateArg implements TemplateArg {
   @override
   String toCodeSegment() {
     return 'uint64_t $name';
-  }
-
-  @override
-  void toC(CodeBuffer buf) {
-    buf.write(toCodeSegment());
-  }
-}
-
-class Template implements Code {
-  String name;
-  List<TemplateArg> args;
-  Template(this.name, [this.args = const []]);
-
-  @override
-  String toCodeSegment() {
-    var sb = new StringBuffer();
-    sb.write(name);
-    if (args.length != 0) {
-      sb.write('<');
-      sb.write(args.map((a) => a.toCodeSegment()).join(', '));
-      sb.write('>');
-    }
-    return sb.toString();
   }
 
   @override
