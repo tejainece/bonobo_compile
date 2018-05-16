@@ -84,7 +84,7 @@ class Method implements TypeMember, MethodPrototype {
     if (args.length != parameters.length) return false;
     for (int i = 0; i < args.length; i++) {
       // TODO consider sub-classes
-      if (parameters[i].type.isSameType(args[i].type)) return false;
+      if(!args[i].type.isAssignableTo(parameters[i].type)) return false;
     }
     return true;
   }

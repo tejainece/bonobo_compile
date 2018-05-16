@@ -37,4 +37,20 @@ class VarType implements Sxst {
   final List<TemplateArg> templates;
   VarType(this.type, [List<TemplateArg> templates])
       : templates = templates ?? [];
+
+  bool isSameType(VarType other) {
+    // TODO
+  }
+
+  bool isAssignableTo(VarType other) {
+    // TODO
+  }
+
+  VarType getFieldType(String name) {
+    // TODO
+  }
+
+  VarType getMethodReturnTypeByInvocation(String name, List<Expression> args) {
+    // TODO
+  }
 }

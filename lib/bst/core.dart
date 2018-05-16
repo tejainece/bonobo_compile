@@ -1,6 +1,6 @@
 part of 'bst.dart';
 
-StructDecl $Self = new StructDecl('Self'); // TODO this is not StructDecl
+// TODO StructDecl $Self = new StructDecl('Self'); // TODO this is not StructDecl
 
 StructDecl $Object = new StructDecl('Object');
 
@@ -26,7 +26,9 @@ CompilationUnit core = new CompilationUnit('core')
   });
 
 void setupCore() {
-  $Int..addMethod('sqrt', [], $Self)..addMethod('toString', [], $String);
+  $Int
+    ..addMethod('sqrt', [], new VarType($Int))
+    ..addMethod('toString', [], new VarType($String));
 }
 
 InitCall newString(String literal) {

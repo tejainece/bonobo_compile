@@ -56,17 +56,17 @@ abstract class Expression implements Sxst {
   }
 
   MemberAccess field(String name) {
-    Field f = type.fieldByName(name);
+    VarType f = type.getFieldType(name);
     if (f == null)
-      throw new Exception("Field $name not found in ${type.name}!");
-    return new MemberAccess(this, new FieldPart(f.name, f.type));
+      throw new Exception("Field $name not found in ${type}!");
+    return new MemberAccess(this, new FieldPart(name, f));
   }
 
   MemberAccess call(String name, {List<Expression> args: const []}) {
-    Method m = type.methodByInvocation(name, args);
+    VarType m = type.getMethodReturnTypeByInvocation(name, args);
     if (m == null)
-      throw new Exception("Method $name not found in ${type.name}!");
-    return new MemberAccess(this, new CallPart(name, m.returnType, args));
+      throw new Exception("Method $name not found in ${type}!");
+    return new MemberAccess(this, new CallPart(name, m, args));
   }
 
   /* TODO
@@ -114,10 +114,10 @@ class FieldPart implements MemberPart {
       next.field(name);
       return;
     }
-    Field f = type.fieldByName(name);
+    VarType f = type.getFieldType(name);
     if (f == null)
-      throw new Exception("Field $name not found in ${type.name}!");
-    next = FieldPart(f.name, f.type);
+      throw new Exception("Field $name not found in ${type}!");
+    next = FieldPart(name, f);
   }
 
   void call(String name, {List<Expression> args: const []}) {
@@ -125,9 +125,9 @@ class FieldPart implements MemberPart {
       next.field(name);
       return;
     }
-    Method m = type.methodByInvocation(name, args);
+    VarType m = type.getMethodReturnTypeByInvocation(name, args);
     if (m == null) throw new Exception("Method not found!");
-    next = new CallPart(name, m.returnType, args);
+    next = new CallPart(name, m, args);
   }
 }
 
@@ -146,10 +146,10 @@ class CallPart implements MemberPart {
       next.field(name);
       return;
     }
-    Field f = type.fieldByName(name);
+    VarType f = type.getFieldType(name);
     if (f == null)
-      throw new Exception("Field $name not found in ${type.name}!");
-    next = FieldPart(f.name, f.type);
+      throw new Exception("Field $name not found in ${type}!");
+    next = FieldPart(name, f);
   }
 
   void call(String name, {List<Expression> args: const []}) {
@@ -157,9 +157,9 @@ class CallPart implements MemberPart {
       next.field(name);
       return;
     }
-    Method m = type.methodByInvocation(name, args);
+    VarType m = type.getMethodReturnTypeByInvocation(name, args);
     if (m == null) throw new Exception("Method not found!");
-    next = new CallPart(name, m.returnType, args);
+    next = new CallPart(name, m, args);
   }
 }
 

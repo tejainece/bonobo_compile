@@ -32,7 +32,6 @@ abstract class TypeDeclMixin implements TypeDecl {
 
   MethodPrototype addMethodPrototype(
       String name, List<Param> parameters, VarType returnType) {
-    if (returnType.type == $Self) returnType = new VarType(this);
     var meth = new MethodPrototype(this, name, parameters, returnType);
     methods.add(meth);
     return meth;
@@ -41,7 +40,7 @@ abstract class TypeDeclMixin implements TypeDecl {
   // TODO opMethod
   $Var mkV(String name) => new $Var(name, new VarType(this)); // TODO
   InitCall mk(String name, List<Expression> args) =>
-      new InitCall(name, new VarType(this), args);  // TODO
+      new InitCall(name, new VarType(this), args); // TODO
   Field fieldByName(String name) =>
       fields.firstWhere((f) => f.name == name, orElse: () => null);
   MethodPrototype methodByInvocation(String name, List<Expression> args) =>
@@ -93,7 +92,6 @@ abstract class MixinTypeDeclMixin implements MixinTypeDecl {
   }
 
   Method addMethod(String name, List<Param> parameters, VarType returnType) {
-    if (returnType.type == $Self) returnType = this;
     var meth = new Method(this, name, parameters, returnType, new Block([]));
     methods.add(meth);
     return meth;
@@ -101,16 +99,23 @@ abstract class MixinTypeDeclMixin implements MixinTypeDecl {
 
   MethodPrototype addMethodPrototype(
       String name, List<Param> parameters, VarType returnType) {
-    if (returnType.type == $Self) returnType = this;
     var meth = new MethodPrototype(this, name, parameters, returnType);
     methods.add(meth);
     return meth;
   }
 
   // TODO opMethod
-  $Var mkV(String name) => new $Var(name, this);
-  InitCall mk(String name, List<Expression> args) =>
-      new InitCall(name, this, args);
+  $Var mkV(String name) => new $Var(
+      name,
+      new VarType(
+        this, /* TODO templateArgs: generics */
+      ));
+  InitCall mk(String name, List<Expression> args) => new InitCall(
+      name,
+      new VarType(
+        this, /* TODO templateArgs */
+      ),
+      args);
   Field fieldByName(String name) =>
       fields.firstWhere((f) => f.name == name, orElse: () => null);
   Method methodByInvocation(String name, List<Expression> args) => methods
@@ -172,16 +177,23 @@ abstract class ConcreteTypeDeclMixin implements ConcreteTypeDecl {
   }
 
   Method addMethod(String name, List<Param> parameters, VarType returnType) {
-    if (returnType.type == $Self) returnType = this;
     var meth = new Method(this, name, parameters, returnType, new Block([]));
     methods.add(meth);
     return meth;
   }
 
   // TODO opMethod
-  $Var mkV(String name) => new $Var(name, this);
-  InitCall mk(String name, List<Expression> args) =>
-      new InitCall(name, this, args);
+  $Var mkV(String name) => new $Var(
+      name,
+      new VarType(
+        this, /* TODO templateArgs */
+      ));
+  InitCall mk(String name, List<Expression> args) => new InitCall(
+      name,
+      new VarType(
+        this, /* TODO templateArgs */
+      ),
+      args);
   Field fieldByName(String name) =>
       fields.firstWhere((f) => f.name == name, orElse: () => null);
   Method methodByInvocation(String name, List<Expression> args) => methods
